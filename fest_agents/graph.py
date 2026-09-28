@@ -2,8 +2,7 @@
 graph.py - LangGraph Multi-Agent Workflow for College Fest Management
 """
 
-from typing import Dict, Any
-
+from langgraph.graph import StateGraph, END
 from .state import AgentState
 from .routers import route_supervisor
 from .nodes import (
@@ -16,44 +15,11 @@ from .nodes import (
     faq_helpdesk_agent
 )
 
-try:
-    from langgraph.graph import StateGraph, END
-    HAS_LANGGRAPH = True
-except ImportError:
-    HAS_LANGGRAPH = False
-
 
 def build_fest_graph():
     """
     Constructs and compiles the StateGraph workflow for the college fest agents.
     """
-    if not HAS_LANGGRAPH:
-        # Fallback runner in case user runs demo before installing langgraph package
-        class StandaloneFestRunner:
-            def invoke(self, state: AgentState) -> Dict[str, Any]:
-                current_state = dict(state)
-                # 1. Run supervisor
-                sup_result = supervisor_agent(current_state)
-                current_state.update(sup_result)
-                
-                # 2. Route to specialized agent
-                destination = route_supervisor(current_state)
-                agent_map = {
-                    "event_agent": event_management_agent,
-                    "participant_agent": participant_team_agent,
-                    "judging_agent": judging_evaluation_agent,
-                    "result_cert_agent": result_cert_agent,
-                    "sponsor_analytics_agent": sponsor_analytics_agent,
-                    "faq_agent": faq_helpdesk_agent,
-                }
-                worker_func = agent_map.get(destination, faq_helpdesk_agent)
-                agent_result = worker_func(current_state)
-                current_state.update(agent_result)
-                return current_state
-                
-        return StandaloneFestRunner()
-
-    # Standard LangGraph StateGraph assembly
     workflow = StateGraph(AgentState)
 
     # 1. Register all agent nodes
@@ -95,5 +61,5 @@ def build_fest_graph():
     return app
 
 
-# Pre-compiled application graph instance ready for import
+# Pre-compiled application graph instance ready for execution
 app = build_fest_graph()

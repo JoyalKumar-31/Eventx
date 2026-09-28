@@ -1,10 +1,11 @@
 """
-nodes.py - Agent nodes for College Fest Management System
-Each agent follows the prompt-execution-cleanup-state pattern.
+nodes.py - Agent nodes for College Fest Management System using Groq API
 """
 
 import os
 from typing import Dict, Any
+from dotenv import load_dotenv
+from langchain_groq import ChatGroq
 
 from .state import AgentState
 from .tools import (
@@ -22,124 +23,17 @@ from .tools import (
     draft_announcement
 )
 
+# Load environment variables from .env file
+load_dotenv()
 
-# =====================================================================
-# LLM Loader with Smart Fallback (Runs even without external API keys!)
-# =====================================================================
+# Initialize Groq LLM using Groq API Key
+groq_api_key = os.getenv("GROQ_API_KEY")
 
-class FallbackFestLLM:
-    """
-    Simulated LLM engine that produces realistic responses when no external
-    LLM API key (OpenAI/Google) is configured. Ensures the project runs out-of-the-box!
-    """
-    class Response:
-        def __init__(self, content: str):
-            self.content = content
-
-    def invoke(self, prompt: str):
-        prompt_lower = prompt.lower()
-        
-        # Supervisor routing decisions
-        if "route to only one" in prompt_lower or "supervisor agent" in prompt_lower:
-            # Look specifically inside USER REQUEST section
-            user_text = prompt_lower
-            if "user request:" in prompt_lower:
-                user_text = prompt_lower.split("user request:")[1]
-                if "analyze the request" in user_text:
-                    user_text = user_text.split("analyze the request")[0]
-
-            # Prioritize specific intents first
-            if any(k in user_text for k in ["certificate", "announcement", "result", "winner"]):
-                return self.Response("result_cert_agent")
-            elif any(k in user_text for k in ["sponsor", "analytics", "revenue", "footfall", "funding"]):
-                return self.Response("sponsor_analytics_agent")
-            elif any(k in user_text for k in ["judge", "score", "rubric", "evaluation", "rank"]):
-                return self.Response("judging_agent")
-            elif any(k in user_text for k in ["qr pass", "pass-", "reg-", "attendance", "check-in"]):
-                return self.Response("participant_agent")
-            elif any(k in user_text for k in ["event", "schedule", "clash", "venue", "timing", "timing", "hackathon", "robowars"]):
-                return self.Response("event_agent")
-            elif any(k in user_text for k in ["team", "register", "participant", "member"]):
-                return self.Response("participant_agent")
-            return self.Response("faq_agent")
-        
-        # Event Management fallback
-        if "event management agent" in prompt_lower:
-            return self.Response(
-                "Here are the event details:\n"
-                "- Event: TechSprint 24-Hour Hackathon\n"
-                "- Venue: Main Computer Lab (Block A)\n"
-                "- Schedule: Day 1, 10:00 AM to Day 2, 10:00 AM\n"
-                "- Team Size: 2 to 4 members | Fee: Rs. 500\n"
-                "- Core Rules: Code must be built within 24 hours. Pre-existing templates are disallowed. GitHub commits mandatory.\n"
-                "No schedule conflicts detected."
-            )
-            
-        # Participant & Team fallback
-        if "participant and team agent" in prompt_lower:
-            return self.Response(
-                "Participant & Team Validation Status:\n"
-                "✓ Eligibility: The proposed team structure meets the fest regulations (2-4 members for Hackathon).\n"
-                "✓ Entry Pass: Digital QR passes will be unlocked upon payment confirmation.\n"
-                "Note: Please keep your college student ID card handy at the registration desk for verification."
-            )
-            
-        # Judging & Evaluation fallback
-        if "judging & evaluation agent" in prompt_lower:
-            return self.Response(
-                "[OFFICIAL EVALUATION & RANKINGS]\n"
-                "1. Rank #1 (Winner): Team CyberKnights - Score: 93/100 (Exceptional innovation & clean architecture)\n"
-                "2. Rank #2 (Runner Up): Team MechaTitans - Score: 87/100 (Strong technical execution and robust design)\n"
-                "3. Rank #3 (2nd Runner Up): Team CodeCrafters - Score: 81/100 (Creative concept, needs UI polish)\n"
-                "Evaluation adheres to official 100-point rubric."
-            )
-            
-        # Result & Certificate fallback
-        if "result and certificate agent" in prompt_lower:
-            return self.Response(
-                "[CERTIFICATE & RESULT DISPATCH]\n"
-                "- Document: Official Certificate of Excellence\n"
-                "- Recipient: Aarav Sharma (Team CyberKnights)\n"
-                "- Event: TechSprint 24-Hour Hackathon (1st Place Winner)\n"
-                "- Verification ID: CERT-FEST-84921\n"
-                "- Public Announcement: Drafted and queued for the student portal banner."
-            )
-            
-        # Sponsor & Analytics fallback
-        if "sponsor & analytics agent" in prompt_lower:
-            return self.Response(
-                "[FEST ANALYTICS & SPONSORSHIP SUMMARY]\n"
-                "- Total Registered Students: 1,420 across 18 events\n"
-                "- Registration Revenue: Rs. 2,85,000\n"
-                "- Confirmed Sponsorships: Rs. 4,50,000 (Title: TechNova, Associate: CloudSprint)\n"
-                "- Gate Footfall Check-in Rate: 83.1% via QR scanner verification."
-            )
-            
-        # Default FAQ response
-        return self.Response(
-            "Welcome to the College Fest Helpdesk! For UPI payment receipt verifications, "
-            "visit Counter #2 at the Student Activity Center. Event gates open at 8:30 AM daily."
-        )
-
-
-def _get_llm():
-    """Initializes external LLM if API keys are set, otherwise uses FallbackFestLLM."""
-    if os.environ.get("OPENAI_API_KEY"):
-        try:
-            from langchain_openai import ChatOpenAI
-            return ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
-        except Exception:
-            pass
-    if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
-        try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            return ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
-        except Exception:
-            pass
-    return FallbackFestLLM()
-
-
-llm = _get_llm()
+llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    temperature=0.2,
+    api_key=groq_api_key
+)
 
 
 # =====================================================================
@@ -149,7 +43,7 @@ llm = _get_llm()
 def supervisor_agent(state: AgentState) -> Dict[str, Any]:
     """
     Supervisor Agent that analyzes the user's inquiry and role,
-    then directs the workflow to the specialized fest agent.
+    then directs the workflow to the specialized fest agent via Groq LLM.
     """
     question = state["question"]
     user_role = state.get("user_role", "student")
@@ -173,7 +67,7 @@ Analyze the request and route to ONLY ONE of the following specialized agents:
 - sponsor_analytics_agent: Fest revenue, participant counts, footfall, sponsor packages and reports.
 - faq_agent: General helpdesk, UPI payment issues, campus locations, directions.
 
-Return ONLY the agent name (e.g. event_agent, participant_agent, judging_agent, result_cert_agent, sponsor_analytics_agent, or faq_agent).
+Return ONLY the agent name (one of: event_agent, participant_agent, judging_agent, result_cert_agent, sponsor_analytics_agent, faq_agent).
 Do not use markdown fences.
 """
 
@@ -194,7 +88,12 @@ Do not use markdown fences.
     }
 
     if route not in valid_routes:
-        route = "faq_agent"
+        for r in valid_routes:
+            if r in route:
+                route = r
+                break
+        else:
+            route = "faq_agent"
 
     new_history = list(history)
     new_history.append(f"Supervisor routed query to {route}")
@@ -273,7 +172,7 @@ def participant_team_agent(state: AgentState) -> Dict[str, Any]:
     attempt = state.get("attempts", 0)
     history = state.get("history", [])
 
-    # Example tool check: team size validation or registration lookup
+    # Tool checks: registration lookup or QR pass validation
     tools_context = {}
     if "REG-" in question.upper():
         words = question.upper().split()
