@@ -197,4 +197,5 @@ pytest -v tests/test_api.py
 
 ## 👥 Contributors
 
+- **Joel Gera** — FastAPI Backend Architecture, MySQL Relational Database, Alembic Migrations, Live Tool Bindings
 - **Dinesh** — Multi-Agent AI System Architecture, LangGraph Workflows, Prompt Engineering
