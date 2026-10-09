@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_current_user, require_role
-from app.models.enums import UserRole
+from app.models.enums import UserRole, ApplicationStatus, InvitationStatus
 from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.models.judging import JudgeAssignment
@@ -13,9 +13,27 @@ from app.schemas.admin import (
     JudgeDashboardStats,
     AuditLogResponse
 )
+from app.schemas.application import (
+    CoordinatorApplicationResponse,
+    JudgeApplicationResponse,
+    InvitationCreateRequest,
+    InvitationResponse,
+    ApplicationReviewRequest
+)
 from app.services.analytics_service import (
     get_admin_dashboard_metrics,
     get_coordinator_dashboard_metrics
+)
+from app.services.application_service import (
+    list_coordinator_applications,
+    approve_coordinator_application,
+    reject_coordinator_application,
+    list_judge_applications,
+    approve_judge_application,
+    reject_judge_application,
+    create_invitation,
+    list_invitations,
+    revoke_invitation
 )
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -96,3 +114,145 @@ def get_audit_logs(
             )
         )
     return results
+
+
+# ==============================================================================
+# ADMIN ROLE WORKFLOW: COORDINATOR APPLICATIONS REVIEW
+# ==============================================================================
+
+@router.get("/applications/coordinators", response_model=List[CoordinatorApplicationResponse])
+def get_coordinator_applications(
+    status: Optional[ApplicationStatus] = Query(None, description="Filter by status: PENDING, APPROVED, REJECTED"),
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(UserRole.ADMIN))
+):
+    """
+    Lists all coordinator applications for administrator review.
+    """
+    apps = list_coordinator_applications(db=db, status_filter=status)
+    return [CoordinatorApplicationResponse.model_validate(a) for a in apps]
+
+
+@router.post("/applications/coordinators/{application_id}/approve", response_model=CoordinatorApplicationResponse)
+def approve_coordinator(
+    application_id: int,
+    req: ApplicationReviewRequest = None,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(UserRole.ADMIN))
+):
+    """
+    Approves an Event Coordinator application and assigns the EVENT_COORDINATOR role to the user.
+    """
+    notes = req.admin_notes if req else None
+    app = approve_coordinator_application(db=db, application_id=application_id, admin_user=admin_user, admin_notes=notes)
+    return CoordinatorApplicationResponse.model_validate(app)
+
+
+@router.post("/applications/coordinators/{application_id}/reject", response_model=CoordinatorApplicationResponse)
+def reject_coordinator(
+    application_id: int,
+    req: ApplicationReviewRequest = None,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(UserRole.ADMIN))
+):
+    """
+    Rejects an Event Coordinator application with optional reason notes.
+    """
+    notes = req.admin_notes if req else None
+    app = reject_coordinator_application(db=db, application_id=application_id, admin_user=admin_user, admin_notes=notes)
+    return CoordinatorApplicationResponse.model_validate(app)
+
+
+# ==============================================================================
+# ADMIN ROLE WORKFLOW: JUDGE APPLICATIONS REVIEW
+# ==============================================================================
+
+@router.get("/applications/judges", response_model=List[JudgeApplicationResponse])
+def get_judge_applications(
+    status: Optional[ApplicationStatus] = Query(None, description="Filter by status: PENDING, APPROVED, REJECTED"),
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(UserRole.ADMIN))
+):
+    """
+    Lists all fest judge applications for administrator review.
+    """
+    apps = list_judge_applications(db=db, status_filter=status)
+    return [JudgeApplicationResponse.model_validate(a) for a in apps]
+
+
+@router.post("/applications/judges/{application_id}/approve", response_model=JudgeApplicationResponse)
+def approve_judge(
+    application_id: int,
+    req: ApplicationReviewRequest = None,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(UserRole.ADMIN))
+):
+    """
+    Approves a Fest Judge application and assigns the JUDGE role to the user.
+    """
+    notes = req.admin_notes if req else None
+    app = approve_judge_application(db=db, application_id=application_id, admin_user=admin_user, admin_notes=notes)
+    return JudgeApplicationResponse.model_validate(app)
+
+
+@router.post("/applications/judges/{application_id}/reject", response_model=JudgeApplicationResponse)
+def reject_judge(
+    application_id: int,
+    req: ApplicationReviewRequest = None,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(UserRole.ADMIN))
+):
+    """
+    Rejects a Fest Judge application with optional reason notes.
+    """
+    notes = req.admin_notes if req else None
+    app = reject_judge_application(db=db, application_id=application_id, admin_user=admin_user, admin_notes=notes)
+    return JudgeApplicationResponse.model_validate(app)
+
+
+# ==============================================================================
+# ADMIN ROLE WORKFLOW: JUDGE & SPONSOR INVITATIONS
+# ==============================================================================
+
+@router.post("/invitations", response_model=InvitationResponse, status_code=status.HTTP_201_CREATED)
+def create_role_invitation(
+    req: InvitationCreateRequest,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(UserRole.ADMIN))
+):
+    """
+    Issues a cryptographically secure single-use invitation token for a Judge or Sponsor.
+    """
+    inv, raw_token = create_invitation(db=db, req=req, admin_user=admin_user)
+    resp = InvitationResponse.model_validate(inv)
+    resp.raw_token = raw_token
+    resp.invite_url = f"/invite/accept?token={raw_token}"
+    return resp
+
+
+@router.get("/invitations", response_model=List[InvitationResponse])
+def get_role_invitations(
+    role: Optional[UserRole] = Query(None, description="Filter by role: JUDGE, SPONSOR"),
+    status: Optional[InvitationStatus] = Query(None, description="Filter by status: PENDING, ACCEPTED, EXPIRED, REVOKED"),
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(UserRole.ADMIN))
+):
+    """
+    Lists all administrator-created role invitations.
+    """
+    invs = list_invitations(db=db, role_filter=role, status_filter=status)
+    return [InvitationResponse.model_validate(i) for i in invs]
+
+
+@router.delete("/invitations/{invitation_id}", response_model=InvitationResponse)
+def revoke_role_invitation(
+    invitation_id: int,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(UserRole.ADMIN))
+):
+    """
+    Revokes a pending role invitation, invalidating its token.
+    """
+    inv = revoke_invitation(db=db, invitation_id=invitation_id, admin_user=admin_user)
+    return InvitationResponse.model_validate(inv)
+

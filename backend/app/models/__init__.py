@@ -13,6 +13,14 @@ from app.models.enums import (
     SponsorshipStatus,
     PromotionSlotType,
     AnnouncementTarget,
+    ApplicationStatus,
+    InvitationStatus,
+)
+from app.models.application import (
+    CoordinatorApplication,
+    JudgeApplication,
+    SponsorApplication,
+    Invitation,
 )
 from app.models.user import (
     User,
@@ -101,4 +109,10 @@ __all__ = [
     "PromotionSlot",
     "Announcement",
     "AuditLog",
+    "ApplicationStatus",
+    "InvitationStatus",
+    "CoordinatorApplication",
+    "JudgeApplication",
+    "SponsorApplication",
+    "Invitation",
 ]

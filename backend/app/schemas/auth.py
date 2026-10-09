@@ -30,16 +30,38 @@ class SponsorProfileCreate(BaseModel):
     contact_phone: Optional[str] = None
 
 
-class UserRegisterRequest(BaseModel):
+class StudentRegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     email: EmailStr
     password: str = Field(min_length=6)
-    full_name: str
-    role: UserRole = UserRole.STUDENT
+    full_name: str = Field(..., min_length=2, max_length=255)
     phone: Optional[str] = None
+    college_name: Optional[str] = None
+    student_id_number: Optional[str] = None
+    department: Optional[str] = None
+    year_of_study: Optional[str] = "1st Year"
     student_profile: Optional[StudentProfileCreate] = None
-    coordinator_profile: Optional[CoordinatorProfileCreate] = None
-    judge_profile: Optional[JudgeProfileCreate] = None
-    sponsor_profile: Optional[SponsorProfileCreate] = None
+
+
+class UserRegisterRequest(BaseModel):
+    """
+    Standard registration schema. Role is strictly assigned as STUDENT on the server.
+    Any client-supplied role or profile fields are ignored to prevent privilege escalation.
+    """
+    model_config = ConfigDict(extra="ignore")
+
+    email: EmailStr
+    password: str = Field(min_length=6)
+    full_name: str = Field(..., min_length=2, max_length=255)
+    phone: Optional[str] = None
+    college_name: Optional[str] = None
+    student_id_number: Optional[str] = None
+    department: Optional[str] = None
+    year_of_study: Optional[str] = "1st Year"
+    student_profile: Optional[StudentProfileCreate] = None
+    role: Optional[str] = None  # Ignored by server; role is always STUDENT
+
 
 
 class UserLoginRequest(BaseModel):

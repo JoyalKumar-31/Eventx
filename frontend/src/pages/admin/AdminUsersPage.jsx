@@ -8,7 +8,6 @@ const ROLES = [
   "EVENT_COORDINATOR",
   "JUDGE",
   "ADMIN",
-  "SPONSOR",
 ];
 
 export default function AdminUsersPage() {

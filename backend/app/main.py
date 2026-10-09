@@ -1,3 +1,4 @@
+# EventX Main FastAPI Entrypoint
 import os
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -18,11 +19,11 @@ from app.api.v1 import (
     results,
     certificates,
     notifications,
-    sponsors,
     announcements,
     admin,
     public,
-    agents
+    agents,
+    invitations
 )
 
 app = FastAPI(
@@ -44,7 +45,6 @@ app = FastAPI(
         {"name": "Results", "description": "Standings calculation and published results"},
         {"name": "Certificates", "description": "Dynamic PDF certificates and public verification"},
         {"name": "Notifications", "description": "In-app notifications and alerts"},
-        {"name": "Sponsors", "description": "Sponsorship tiers, promotional slots, and engagement reach"},
         {"name": "Announcements", "description": "Fest announcements and targeted broadcasts"},
         {"name": "Admin", "description": "System analytics, audit trails, and revenue metrics"},
         {"name": "Public", "description": "Unauthenticated public schedules, stats, and venues"},
@@ -99,11 +99,11 @@ app.include_router(scores.router, prefix="/api")
 app.include_router(results.router, prefix="/api")
 app.include_router(certificates.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
-app.include_router(sponsors.router, prefix="/api")
 app.include_router(announcements.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(public.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
+app.include_router(invitations.router, prefix="/api")
 
 
 @app.get("/api/health", tags=["Health"])

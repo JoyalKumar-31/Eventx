@@ -11,6 +11,7 @@ import {
   TrendingUp,
   Activity,
   FileText,
+  UserCheck,
 } from "lucide-react";
 import { adminApi } from "../../api/adminApi";
 import StatCard from "../../components/StatCard";
@@ -56,10 +57,16 @@ export default function AdminDashboard() {
           </p>
           <div className="pt-2 flex flex-wrap gap-3">
             <Link
-              to="/admin/users"
+              to="/admin/applications"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-sm transition-all shadow-lg shadow-purple-600/30"
             >
-              <Users className="w-4 h-4" /> Manage Users & Roles
+              <UserCheck className="w-4 h-4" /> Role Approvals & Invites
+            </Link>
+            <Link
+              to="/admin/users"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-sm transition-all border border-slate-700"
+            >
+              <Users className="w-4 h-4" /> Manage Users
             </Link>
             <Link
               to="/admin/audit-logs"
@@ -103,8 +110,8 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* Second Row: Attendance & Sponsors */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Second Row: Attendance & Certificates */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatCard
           title="Total Attendance"
           value={metrics?.total_attendance ?? 0}
@@ -118,13 +125,6 @@ export default function AdminDashboard() {
           subtitle="Issued digital credentials"
           icon={FileText}
           color="rose"
-        />
-        <StatCard
-          title="Active Sponsors"
-          value={metrics?.total_sponsors ?? 0}
-          subtitle="Brand partnerships"
-          icon={Building}
-          color="emerald"
         />
       </div>
 

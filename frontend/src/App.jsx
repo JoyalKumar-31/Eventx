@@ -10,11 +10,13 @@ import { StudentLayout } from "./layouts/StudentLayout";
 import { CoordinatorLayout } from "./layouts/CoordinatorLayout";
 import { JudgeLayout } from "./layouts/JudgeLayout";
 import { AdminLayout } from "./layouts/AdminLayout";
-import { SponsorLayout } from "./layouts/SponsorLayout";
 
 // Auth & Error Pages
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
+import CoordinatorApplyPage from "./pages/auth/CoordinatorApplyPage";
+import JudgeApplyPage from "./pages/auth/JudgeApplyPage";
+import AcceptInvitationPage from "./pages/auth/AcceptInvitationPage";
 import ForbiddenPage from "./pages/auth/ForbiddenPage";
 import NotFoundPage from "./pages/auth/NotFoundPage";
 
@@ -55,16 +57,10 @@ import JudgeRankingsPage from "./pages/judge/JudgeRankingsPage";
 // Admin Portal Pages
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
+import AdminApplicationsPage from "./pages/admin/AdminApplicationsPage";
 import AdminEventsPage from "./pages/admin/AdminEventsPage";
-import AdminSponsorsPage from "./pages/admin/AdminSponsorsPage";
 import AdminRevenuePage from "./pages/admin/AdminRevenuePage";
 import AdminAuditLogsPage from "./pages/admin/AdminAuditLogsPage";
-
-// Sponsor Portal Pages
-import SponsorDashboard from "./pages/sponsor/SponsorDashboard";
-import SponsorPlansPage from "./pages/sponsor/SponsorPlansPage";
-import SponsorPromotionsPage from "./pages/sponsor/SponsorPromotionsPage";
-import SponsorAnalyticsPage from "./pages/sponsor/SponsorAnalyticsPage";
 
 export default function App() {
   return (
@@ -84,6 +80,9 @@ export default function App() {
             <Route path="/verify/:hash" element={<CertificateVerifyPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/apply/coordinator" element={<CoordinatorApplyPage />} />
+            <Route path="/apply/judge" element={<JudgeApplyPage />} />
+            <Route path="/invite/accept" element={<AcceptInvitationPage />} />
             <Route path="/403" element={<ForbiddenPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
@@ -162,29 +161,10 @@ export default function App() {
             <Route index element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="users" element={<AdminUsersPage />} />
+            <Route path="applications" element={<AdminApplicationsPage />} />
             <Route path="events" element={<AdminEventsPage />} />
-            <Route path="sponsors" element={<AdminSponsorsPage />} />
             <Route path="revenue" element={<AdminRevenuePage />} />
             <Route path="audit-logs" element={<AdminAuditLogsPage />} />
-          </Route>
-
-          {/* Sponsor Portal */}
-          <Route
-            path="/sponsor"
-            element={
-              <ProtectedRoute>
-                <RoleRoute allowedRoles={["SPONSOR", "ADMIN"]}>
-                  <SponsorLayout />
-                </RoleRoute>
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/sponsor/dashboard" replace />} />
-            <Route path="dashboard" element={<SponsorDashboard />} />
-            <Route path="plans" element={<SponsorPlansPage />} />
-            <Route path="my-sponsorships" element={<SponsorPlansPage />} />
-            <Route path="promotions" element={<SponsorPromotionsPage />} />
-            <Route path="analytics" element={<SponsorAnalyticsPage />} />
           </Route>
         </Routes>
       </AuthProvider>

@@ -21,4 +21,16 @@ export const authApi = {
       localStorage.removeItem("user");
     }
   },
+  applyCoordinator: async (data) => {
+    const res = await apiClient.post("/auth/apply/coordinator", data);
+    return res.data;
+  },
+  applyJudge: async (data) => {
+    const res = await apiClient.post("/auth/apply/judge", data);
+    return res.data;
+  },
+  checkApplicationStatus: async (email) => {
+    const res = await apiClient.get("/auth/application/status", { params: { email } });
+    return res.data;
+  },
 };

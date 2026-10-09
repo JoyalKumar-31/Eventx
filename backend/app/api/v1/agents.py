@@ -63,15 +63,18 @@ def chat_with_agents(
     # Determine role: Prefer authenticated user role if present, else fallback to request role, else "student"
     user_role = "student"
     if current_user:
-        user_role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role).lower()
+        user_role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     elif req.role:
-        user_role = req.role.lower().strip()
+        user_role = req.role
+
+    user_role = str(user_role).lower().strip()
 
     context = req.event_context or {}
     if current_user:
         context["user_id"] = current_user.id
         context["user_email"] = current_user.email
         context["user_name"] = current_user.full_name
+        context["user_role"] = user_role
 
     initial_state = {
         "question": req.question.strip(),

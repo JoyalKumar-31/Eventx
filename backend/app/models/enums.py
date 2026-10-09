@@ -92,3 +92,17 @@ class AnnouncementTarget(str, enum.Enum):
     COORDINATORS = "COORDINATORS"
     JUDGES = "JUDGES"
     SPONSORS = "SPONSORS"
+
+
+class ApplicationStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class InvitationStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    EXPIRED = "EXPIRED"
+    REVOKED = "REVOKED"
+

@@ -27,52 +27,33 @@ def register_user(db: Session, req: UserRegisterRequest, ip_address: Optional[st
     # Hash password securely
     hashed_pwd = hash_password(req.password)
 
+    # STRICT SECURITY: Public registration ALWAYS assigns STUDENT role on server.
+    # Any client-supplied role or elevated profile fields are completely ignored.
     user = User(
         email=req.email.lower().strip(),
         hashed_password=hashed_pwd,
         full_name=req.full_name.strip(),
-        role=req.role,
+        role=UserRole.STUDENT,  # Enforced server-side
         phone=req.phone,
         is_active=True
     )
     db.add(user)
     db.flush()
 
-    # Create associated profile based on role / provided data
-    if req.role == UserRole.STUDENT and req.student_profile:
-        sp = StudentProfile(
-            user_id=user.id,
-            college_name=req.student_profile.college_name,
-            student_id_number=req.student_profile.student_id_number,
-            department=req.student_profile.department,
-            year_of_study=req.student_profile.year_of_study
-        )
-        db.add(sp)
-    elif req.role == UserRole.EVENT_COORDINATOR and req.coordinator_profile:
-        cp = CoordinatorProfile(
-            user_id=user.id,
-            department=req.coordinator_profile.department,
-            designation=req.coordinator_profile.designation,
-            office_location=req.coordinator_profile.office_location
-        )
-        db.add(cp)
-    elif req.role == UserRole.JUDGE and req.judge_profile:
-        jp = JudgeProfile(
-            user_id=user.id,
-            organization=req.judge_profile.organization,
-            specialization=req.judge_profile.specialization,
-            bio=req.judge_profile.bio
-        )
-        db.add(jp)
-    elif req.role == UserRole.SPONSOR and req.sponsor_profile:
-        spp = SponsorProfile(
-            user_id=user.id,
-            company_name=req.sponsor_profile.company_name,
-            industry=req.sponsor_profile.industry,
-            website=req.sponsor_profile.website,
-            contact_phone=req.sponsor_profile.contact_phone
-        )
-        db.add(spp)
+    # Extract student profile attributes from either direct fields or student_profile sub-object
+    college = getattr(req, "college_name", None) or (req.student_profile.college_name if req.student_profile else "University Campus")
+    stu_id = getattr(req, "student_id_number", None) or (req.student_profile.student_id_number if req.student_profile else f"STU-{user.id:04d}")
+    dept = getattr(req, "department", None) or (req.student_profile.department if req.student_profile else "General Studies")
+    year = getattr(req, "year_of_study", None) or (req.student_profile.year_of_study if req.student_profile else "1st Year")
+
+    sp = StudentProfile(
+        user_id=user.id,
+        college_name=college,
+        student_id_number=stu_id,
+        department=dept,
+        year_of_study=year
+    )
+    db.add(sp)
 
     db.commit()
     db.refresh(user)

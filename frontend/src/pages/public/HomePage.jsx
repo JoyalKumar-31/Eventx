@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { publicApi } from "../../api/publicApi";
 import { eventApi } from "../../api/eventApi";
-import { sponsorApi } from "../../api/sponsorApi";
 import { announcementApi } from "../../api/announcementApi";
 import { EventCard } from "../../components/EventCard";
 import { EmptyState } from "../../components/EmptyState";
@@ -25,7 +24,6 @@ export const HomePage = () => {
   const [stats, setStats] = useState({ total_events: 0, total_participants: 0, total_categories: 0, total_venues: 0 });
   const [events, setEvents] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [sponsors, setSponsors] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [faqOpen, setFaqOpen] = useState(null);
@@ -33,18 +31,16 @@ export const HomePage = () => {
   useEffect(() => {
     const loadHomeData = async () => {
       try {
-        const [statsData, eventsData, catsData, sponsorsData, annData] = await Promise.allSettled([
+        const [statsData, eventsData, catsData, annData] = await Promise.allSettled([
           publicApi.getStats(),
           eventApi.getEvents({ limit: 6 }),
           eventApi.getCategories(),
-          sponsorApi.getActivePromotions(),
           announcementApi.getAnnouncements(),
         ]);
 
         if (statsData.status === "fulfilled") setStats(statsData.value);
         if (eventsData.status === "fulfilled") setEvents(eventsData.value);
         if (catsData.status === "fulfilled") setCategories(catsData.value);
-        if (sponsorsData.status === "fulfilled") setSponsors(sponsorsData.value);
         if (annData.status === "fulfilled") setAnnouncements(annData.value);
       } catch (err) {
         console.error("Home data fetch error:", err);
@@ -265,35 +261,7 @@ export const HomePage = () => {
         </div>
       </section>
 
-      {/* 6. Active Sponsors Section */}
-      {sponsors.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-8">
-            <span className="text-xs uppercase font-bold tracking-widest text-sky-400">Partners & Sponsors</span>
-            <h2 className="text-2xl font-bold text-white mt-1">Empowering Campus Talent</h2>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {sponsors.map((sp) => (
-              <div
-                key={sp.id}
-                onClick={() => sp.target_url && sponsorApi.trackClick(sp.id)}
-                className="p-5 rounded-2xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 text-center flex flex-col items-center justify-center transition-all"
-              >
-                {sp.asset_url ? (
-                  <img src={sp.asset_url} alt={sp.title} className="h-10 object-contain mb-2" />
-                ) : (
-                  <Star className="w-6 h-6 text-sky-400 mb-2" />
-                )}
-                <span className="text-xs font-semibold text-slate-200">{sp.title}</span>
-                <span className="text-[10px] text-slate-500 uppercase mt-0.5">{sp.slot_type}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 7. Announcements / Campus Notices */}
+      {/* Announcements / Campus Notices */}
       {announcements.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="p-6 sm:p-8 rounded-3xl border border-indigo-500/20 bg-indigo-950/15">

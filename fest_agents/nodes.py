@@ -1,10 +1,13 @@
 """
-nodes.py - Agent nodes for College Fest Management System using Groq API (Llama 3.3 70B)
-with automatic offline/fallback intelligence.
+nodes.py - Multi-Agent Nodes for EventX College Fest Management System
+Powered by Groq API (Llama 3.3 70B) with deep live MySQL database integration,
+role-aware execution (Student, Coordinator, Judge, Sponsor, Admin), real-world actions,
+and full EventX website knowledge.
 """
 
 import os
-from typing import Dict, Any, Optional
+import re
+from typing import Dict, Any, Optional, List, Tuple
 from dotenv import load_dotenv
 
 from .state import AgentState
@@ -15,9 +18,14 @@ from .tools import (
     validate_team_size,
     check_registration_status,
     verify_qr_entry_pass,
+    register_student_for_event,
+    get_user_registrations,
+    check_in_participant,
     get_evaluation_rubric,
     calculate_rankings,
     get_live_event_results,
+    calculate_and_record_scores,
+    get_judge_assigned_events,
     get_fest_analytics,
     get_sponsor_reports,
     generate_certificate_text,
@@ -27,7 +35,6 @@ from .tools import (
 # Load environment variables
 load_dotenv()
 
-# Initialize Groq LLM lazily / safely
 _llm_instance = None
 
 
@@ -55,7 +62,7 @@ def invoke_llm(prompt: str, agent_type: str, state: AgentState) -> str:
     """
     Invokes Groq Llama 3.3 70B if available.
     If Groq API key is not configured or network error occurs,
-    uses high-quality rule/tool-based response generation.
+    uses high-quality database-grounded rule-based response generation.
     """
     llm = get_llm()
     if llm:
@@ -68,19 +75,129 @@ def invoke_llm(prompt: str, agent_type: str, state: AgentState) -> str:
         except Exception:
             pass
 
-    # High-quality fallback generation
     return _generate_fallback(agent_type, state)
 
+
+# =====================================================================
+# QUERY PARSERS & HELPERS
+# =====================================================================
+
+def parse_score_inputs(text: str) -> Tuple[Optional[str], Optional[str], Dict[str, float]]:
+    """
+    Extracts event name, team name, and criteria scores from natural language judge queries.
+    Examples:
+      - "calculate the scores for Team Alpha in Hackathon: Innovation 24, Technical 25, Presentation 22"
+      - "calculate scores for CyberKnights: 25, 24, 20"
+      - "give score 85 to team 1 in codesprint"
+    """
+    clean = text.strip()
+
+    # 1. Extract criteria score pairs like "Innovation: 24" or "Technical = 25"
+    criteria_matches = re.findall(r'([a-zA-Z\s]{3,25})[:=]\s*(\d+(?:\.\d+)?)', clean)
+    scores_dict: Dict[str, float] = {}
+
+    if criteria_matches:
+        for crit, val in criteria_matches:
+            c_name = crit.strip().title()
+            if c_name.lower() not in ["for", "in", "at", "score", "scores", "event"]:
+                scores_dict[c_name] = float(val)
+
+    # 2. If no criteria pairs, extract isolated numbers (e.g. "scores: 25, 24, 22")
+    if not scores_dict:
+        # Find all numbers preceded by score/scores or in commas
+        num_matches = re.findall(r'\b(\d+(?:\.\d+)?)\b', clean)
+        # Filter out numbers that look like years (2026) or IDs (101)
+        valid_nums = [float(n) for n in num_matches if float(n) <= 100 and float(n) > 0 and n != "2026"]
+        if len(valid_nums) >= 2:
+            default_criteria = ["Innovation & Idea", "Technical Implementation", "Presentation & UI", "Q&A Defense"]
+            for i, num in enumerate(valid_nums):
+                c_name = default_criteria[i] if i < len(default_criteria) else f"Criterion #{i+1}"
+                scores_dict[c_name] = num
+        elif len(valid_nums) == 1:
+            scores_dict["Overall Performance Score"] = valid_nums[0]
+
+    # Default fallback if judge asks to calculate without specifying numbers
+    if not scores_dict:
+        scores_dict = {
+            "Innovation & Originality": 24.0,
+            "Technical Execution": 25.0,
+            "Presentation & Impact": 23.0
+        }
+
+    # 3. Extract Team Name or ID
+    team_match = re.search(r'\b(?:team|squad|participant|entry)\s+([a-zA-Z0-9_\-]+(?:\s+[a-zA-Z0-9_\-]+)?)', clean, re.IGNORECASE)
+    team_name = team_match.group(1).strip() if team_match else None
+    if not team_name:
+        reg_match = re.search(r'\b(REG-[0-9a-zA-Z\-]+)\b', clean, re.IGNORECASE)
+        team_name = reg_match.group(1).strip() if reg_match else "Team Alpha"
+
+    # 4. Extract Event Name
+    event_match = re.search(r'\b(?:in|for|of)\s+([a-zA-Z0-9\s\-]+?)(?::|\s+with|\s+scores|\.|$)', clean, re.IGNORECASE)
+    event_name = None
+    if event_match:
+        potential = event_match.group(1).strip()
+        if len(potential) > 3 and not potential.lower().startswith("team"):
+            event_name = potential
+
+    return event_name, team_name, scores_dict
+
+
+def parse_registration_target(text: str) -> Optional[str]:
+    """
+    Extracts target event name from registration requests like:
+      - "register me for CodeSprint"
+      - "I want to register for TechSprint 24-Hour Hackathon"
+      - "enroll me into Battle of the Bands"
+    """
+    lower = text.lower()
+    patterns = [
+        r'register(?:\s+me)?\s+(?:for|into|in|to)\s+([a-zA-Z0-9\s\-]+)',
+        r'enroll(?:\s+me)?\s+(?:for|into|in|to)\s+([a-zA-Z0-9\s\-]+)',
+        r'sign(?:\s+me)?\s+up\s+(?:for|into|in|to)\s+([a-zA-Z0-9\s\-]+)',
+        r'participate\s+(?:in|for)\s+([a-zA-Z0-9\s\-]+)',
+        r'join\s+([a-zA-Z0-9\s\-]+)'
+    ]
+    for p in patterns:
+        m = re.search(p, lower)
+        if m:
+            candidate = m.group(1).strip()
+            # Clean trailing punctuation
+            candidate = re.split(r'[,.?!;]', candidate)[0].strip()
+            if len(candidate) > 2:
+                return candidate
+
+    # Check known event names
+    all_evs = get_all_events()
+    for ev in all_evs:
+        t_low = ev["title"].lower()
+        if t_low in lower:
+            return ev["title"]
+
+    return None
+
+
+# =====================================================================
+# FALLBACK & ROLE-AWARE RESPONSE GENERATOR
+# =====================================================================
 
 def _generate_fallback(agent_type: str, state: AgentState) -> str:
     question = state.get("question", "")
     lower = question.lower()
-    role = state.get("user_role", "student")
+    raw_role = state.get("user_role", "student")
+    role = str(raw_role).lower().strip()
+    context = state.get("event_context", {})
+    user_name = context.get("user_name")
+    user_id = context.get("user_id")
+    user_email = context.get("user_email")
 
+    greeting = f"Hello **{user_name}**" if user_name else "Hello"
+
+    # -------------------------------------------------------------
+    # 1. SUPERVISOR ROUTING
+    # -------------------------------------------------------------
     if agent_type == "supervisor":
-        import re
         tokens = set(re.findall(r'[a-zA-Z0-9_-]+', lower))
-        
+
         def has_any(keywords):
             for k in keywords:
                 if " " in k:
@@ -91,134 +208,371 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
                         return True
             return False
 
-        if has_any(["cert", "certificate", "certificates", "winner", "winners", "announc"]):
-            return "result_cert_agent"
-        elif has_any(["judge", "judges", "judging", "rubric", "evaluat", "rank", "ranking", "rankings", "leaderboard"]):
+        if has_any(["how to", "how can", "apply as", "where to apply", "registration process", "sign up", "signup", "register as", "candidacy", "onboard"]):
+            return "faq_agent"
+        elif has_any(["score", "scores", "judge", "judging", "evaluat", "rubric", "rank", "ranking", "rankings", "leaderboard", "marks"]):
             return "judging_agent"
-        elif has_any(["sponsor", "sponsors", "analytic", "analytics", "revenue", "footfall", "financial", "funding", "stats", "statistics"]):
+        elif has_any(["register", "registration", "enroll", "pass", "passes", "qr", "gate", "attendance", "checkin", "check-in", "squad", "team"]):
+            return "participant_agent"
+        elif has_any(["cert", "certificate", "winner", "winners", "announc", "results"]):
+            return "result_cert_agent"
+        elif has_any(["sponsor", "sponsors", "analytic", "analytics", "revenue", "footfall", "financial", "funding", "stats"]):
             return "sponsor_analytics_agent"
-        elif has_any(["reg-", "pass-", "qr", "gate", "attendance", "checkin", "check-in"]):
-            return "participant_agent"
-        elif has_any(["timing", "timings", "venue", "schedule", "schedules", "clash", "rules", "when", "hackathon", "codesprint", "bytehack"]):
-            return "event_agent"
-        elif has_any(["member", "members", "team", "teams", "register", "registration", "registrations", "participant"]):
-            return "participant_agent"
-        elif has_any(["event", "events"]):
+        elif has_any(["timing", "venue", "schedule", "clash", "rules", "when", "event", "events"]):
             return "event_agent"
         else:
             return "faq_agent"
 
+    # -------------------------------------------------------------
+    # 2. EVENT MANAGEMENT AGENT
+    # -------------------------------------------------------------
     elif agent_type == "event_agent":
+        # Check clash detection
+        if "clash" in lower or "conflict" in lower:
+            evs = get_all_events()
+            if len(evs) >= 2:
+                c_res = check_schedule_clash(evs[0]["title"], evs[1]["title"])
+                status_txt = "⚠️ Potential Schedule/Venue Clash Detected!" if c_res.get("has_conflict") else "✅ No Schedule or Venue Conflicts Found"
+                return (
+                    f"### Event Schedule Conflict Analysis\n\n"
+                    f"{status_txt}\n\n"
+                    f"• **Event 1**: {c_res.get('event_1')}\n"
+                    f"• **Event 2**: {c_res.get('event_2')}\n"
+                    f"• **Venue Clash**: {'Yes' if c_res.get('venue_clash') else 'No'}\n"
+                    f"• **Time Overlap**: {'Yes' if c_res.get('time_clash') else 'No'}\n\n"
+                    f"Visit the live [Fest Schedule](/schedule) or [Campus Venues](/venues) for interactive floor maps."
+                )
+
         matched = get_event_details(question)
         if matched:
             rules_str = "\n".join(f"• {r}" for r in matched.get("rules", []))
+            fee_val = float(matched.get("registration_fee", 0))
+            fee_str = f"₹{fee_val:.0f}" if fee_val > 0 else "Free Entry"
+            is_team = matched.get("is_team_event", matched.get("min_team_size", 1) > 1)
+            min_s = matched.get("min_team_size", 1)
+            max_s = matched.get("max_team_size", 1)
+            team_str = f"{min_s}-{max_s} members" if is_team else "Individual (Solo)"
             return (
-                f"### {matched['title']} ({matched['category']})\n\n"
+                f"### 🎯 {matched['title']} ({matched['category']})\n\n"
                 f"📍 **Venue**: {matched['venue']}\n"
-                f"⏰ **Time**: {matched['start_time']} - {matched['end_time']}\n"
-                f"👥 **Team Size**: {matched['min_team_size']}-{matched['max_team_size']} members\n"
-                f"💰 **Registration Fee**: Rs. {matched['registration_fee']}\n\n"
-                f"**Event Rules**:\n{rules_str}"
+                f"⏰ **Time**: {matched['start_time']} – {matched['end_time']}\n"
+                f"👥 **Team Size**: {team_str}\n"
+                f"💰 **Registration Fee**: {fee_str}\n\n"
+                f"📋 **Official Competition Rules**:\n{rules_str}\n\n"
+                f"💡 *Ready to participate? Just say 'Register me for {matched['title']}'!*"
             )
-        all_evs = get_all_events()
-        events_str = "\n".join(f"• **{e['title']}** ({e['category']}) - {e['time']} at {e['venue']}" for e in all_evs[:4])
-        return (
-            f"Here are the highlighted events scheduled at FESTORA:\n\n{events_str}\n\n"
-            f"For details or rule sheets for a specific event, ask for it by name!"
-        )
 
+        all_evs = get_all_events()
+        if all_evs:
+            events_str = "\n".join(
+                f"• **{e['title']}** ({e['category']}) — {e['time']} at *{e['venue']}* [{e['fee']}]"
+                for e in all_evs[:6]
+            )
+            return (
+                f"### 🎪 Live EventX Festival Catalog\n\n"
+                f"Here are the active competitions and workshops queried from our live database:\n\n"
+                f"{events_str}\n\n"
+                f"🔍 *Ask for any specific event by name to see complete rules, team sizes, and venue maps!*"
+            )
+
+        return "EventX features competitions across Technical, Cultural, and Gaming domains. Explore the complete interactive catalog at [/events](/events)."
+
+    # -------------------------------------------------------------
+    # 3. PARTICIPANT & TEAM AGENT (ACTIONS & QUERIES)
+    # -------------------------------------------------------------
     elif agent_type == "participant_agent":
-        upper_q = question.upper()
-        words = upper_q.replace(":", " ").replace(",", " ").replace(";", " ").split()
-        for w in words:
-            if "REG-" in w or w.isdigit():
+        tool_outputs = state.get("tool_outputs") or {}
+        if "action_result" in tool_outputs:
+            return tool_outputs["action_result"]["message"]
+
+        # ACTION 1: Register student for event
+        is_register_intent = any(k in lower for k in ["register me", "register for", "sign me up", "enroll me", "i want to register", "join event"])
+        if is_register_intent:
+            target_event = parse_registration_target(question)
+            if not target_event:
+                # If user just said "register me" without event name
+                all_evs = get_all_events()
+                ev_names = ", ".join(f"**{e['title']}**" for e in all_evs[:4])
+                return (
+                    f"I would be happy to register you! Which competition would you like to join?\n\n"
+                    f"Popular active events: {ev_names}.\n\n"
+                    f"Simply say: *'Register me for [Event Name]'*."
+                )
+
+            # Execute real registration in database
+            reg_result = register_student_for_event(
+                event_name_or_id=target_event,
+                user_id=user_id,
+                user_email=user_email
+            )
+            return reg_result["message"]
+
+        # ACTION 2: Show my registrations / passes
+        if "my_registrations" in tool_outputs or any(k in lower for k in ["my registration", "my registrations", "my pass", "my passes", "what events am i", "my events", "my tickets"]):
+            if not user_id and not user_email:
+                return (
+                    "Please log into your student account to inspect your registrations and digital passes. "
+                    "You can sign in at [/login](/login)."
+                )
+
+            regs = tool_outputs.get("my_registrations") if "my_registrations" in tool_outputs else get_user_registrations(user_id=user_id, user_email=user_email)
+            if not regs:
+                return (
+                    f"{greeting}! You have not registered for any events yet. "
+                    f"Browse the [Event Catalog](/events) or tell me *'Register me for [Event]'* to get started!"
+                )
+
+            cards = []
+            for r in regs:
+                cards.append(
+                    f"• **{r['event_title']}**\n"
+                    f"  - Reg ID: `{r['registration_number']}` | Status: `{r['status']}`\n"
+                    f"  - Schedule: {r['time']} at {r['venue']}\n"
+                    f"  - Digital QR Pass: `{r['qr_pass']}`"
+                )
+            return (
+                f"### 🎟️ Your EventX Registrations & Passes\n\n"
+                f"{greeting}! Here are your confirmed festival enrollments from our database:\n\n"
+                + "\n\n".join(cards)
+                + f"\n\nAccess your digital barcoded gate passes anytime in [Student Passes](/student/passes)."
+            )
+
+        # ACTION 3: Check-in / Gate Scan
+        if "checkin" in lower or "check-in" in lower or "attendance" in lower:
+            words = question.upper().split()
+            target_reg = None
+            for w in words:
+                if "REG-" in w or "PASS-" in w:
+                    target_reg = w
+                    break
+            if target_reg:
+                res = check_in_participant(target_reg, coordinator_id=user_id)
+                return res["message"]
+
+        # Registration status lookup by code
+        for w in question.upper().split():
+            if "REG-" in w or (w.isdigit() and len(w) <= 4):
                 res = check_registration_status(w)
                 if res.get("found"):
                     return (
-                        f"Registration **{res.get('registration_id', w)}** status: **{res.get('payment_status')}** for *{res.get('event')}*.\n\n"
-                        f"• **Team / Participant**: {res.get('team_name')}\n"
-                        f"• **Team Leader**: {res.get('leader')}\n"
-                        f"• **Members**: {res.get('members_count')}\n"
-                        f"• **Fest Pass**: `{res.get('qr_pass')}`\n"
-                        f"• **Gate Attendance**: {res.get('attendance')}"
+                        f"### 📄 Registration Record: `{res.get('registration_id', w)}`\n\n"
+                        f"• **Event**: {res.get('event')}\n"
+                        f"• **Team / Competitor**: {res.get('team_name')}\n"
+                        f"• **Leader**: {res.get('leader')}\n"
+                        f"• **Squad Size**: {res.get('members_count')} members\n"
+                        f"• **Status**: `{res.get('payment_status')}`\n"
+                        f"• **Digital Pass Key**: `{res.get('qr_pass')}`\n"
+                        f"• **Gate Check-In**: **{res.get('attendance')}**"
                     )
-            if "PASS" in w or "FEST-" in w:
+
+        # Gate Pass verification
+        for w in question.upper().split():
+            if "PASS-" in w:
                 res = verify_qr_entry_pass(w)
-                status_str = "GRANTED" if res.get("granted") else "DENIED"
+                status_str = "✅ GRANTED" if res.get("granted") else "❌ DENIED"
                 msg = res.get("message") or res.get("reason", "Pass processed.")
-                return f"Gate Pass Check for `{w}`: **{status_str}**.\n\n{msg}"
+                return f"### Gate Pass Verification for `{w}`\n\n**Decision**: {status_str}\n\n{msg}"
+
         return (
-            f"As a {role}, you can register individually or in teams for fest events. "
-            f"After completing your registration and fee payment, a cryptographically signed Fest Pass with QR code "
-            f"is automatically issued in your student dashboard for instant gate entry."
+            f"{greeting}! In EventX, students can register individually or in squads. "
+            f"You can ask me to **register you directly** for any event (e.g. *'Register me for CodeSprint'*), "
+            f"lookup your active passes, or check team size eligibility."
         )
 
+    # -------------------------------------------------------------
+    # 4. JUDGING & EVALUATION AGENT (ACTIONS & QUERIES)
+    # -------------------------------------------------------------
     elif agent_type == "judging_agent":
-        # Check if user is asking for rankings or scores of an event
-        live_standings = get_live_event_results(question)
-        if live_standings:
-            event_name = live_standings[0].get("event", "Fest Event")
-            lines = [f"🏆 **Live Standings for {event_name}**:\n"]
-            for s_item in live_standings:
-                lines.append(f"• **{s_item['position']}**: {s_item['team_name']} — Score: {s_item['total_score']}")
-            return "\n".join(lines)
+        tool_outputs = state.get("tool_outputs") or {}
+        if "score_calculation" in tool_outputs:
+            calc_res = tool_outputs["score_calculation"]
+            breakdown_lines = "\n".join(
+                f"• **{item['criteria']}**: `{item['score']} / {item['max']} pts`"
+                for item in calc_res["breakdown"]
+            )
+            db_saved_msg = "✅ **Evaluation permanently recorded into MySQL database.**" if calc_res["saved_to_db"] else "ℹ️ Calculated evaluation scorecard."
+            return (
+                f"### ⚖️ Judge Scorecard & Leaderboard Calculation\n\n"
+                f"• **Event**: {calc_res['event_title']}\n"
+                f"• **Evaluated Team / Entry**: **{calc_res['team_name']}** (Reg ID: `{calc_res['registration_id']}`)\n\n"
+                f"**Score Breakdown**:\n{breakdown_lines}\n\n"
+                f"**Aggregate Score**: `{calc_res['total_score']} / {calc_res['max_score']}` ({calc_res['percentage']}%)\n"
+                f"**Current Standing**: 🏆 **Rank #{calc_res['current_rank']}**\n\n"
+                f"{db_saved_msg}\n\n"
+                f"View all event scorecards in your [Judge Scoring Console](/judge/scoring)."
+            )
 
+        # ACTION 1: Calculate and record scores
+        is_scoring_intent = any(k in lower for k in ["calculate", "score", "scores", "marks", "grade", "points", "evaluate"])
+        has_numbers = bool(re.search(r'\d+', question))
+
+        if is_scoring_intent and has_numbers:
+            ev_name, team_name, scores_dict = parse_score_inputs(question)
+            calc_res = calculate_and_record_scores(
+                event_name_or_id=ev_name or "Event",
+                team_or_reg_identifier=team_name or "Team Alpha",
+                scores_dict=scores_dict,
+                judge_id=user_id if role in ["judge", "admin", "event_coordinator"] else None,
+                remarks=f"Evaluated by {user_name or 'Judge'}"
+            )
+
+            breakdown_lines = "\n".join(
+                f"• **{item['criteria']}**: `{item['score']} / {item['max']} pts`"
+                for item in calc_res["breakdown"]
+            )
+
+            db_saved_msg = "✅ **Evaluation permanently recorded into MySQL database.**" if calc_res["saved_to_db"] else "ℹ️ Calculated evaluation scorecard."
+
+            return (
+                f"### ⚖️ Judge Scorecard & Leaderboard Calculation\n\n"
+                f"• **Event**: {calc_res['event_title']}\n"
+                f"• **Evaluated Team / Entry**: **{calc_res['team_name']}** (Reg ID: `{calc_res['registration_id']}`)\n\n"
+                f"**Score Breakdown**:\n{breakdown_lines}\n\n"
+                f"**Aggregate Score**: `{calc_res['total_score']} / {calc_res['max_score']}` ({calc_res['percentage']}%)\n"
+                f"**Current Standing**: 🏆 **Rank #{calc_res['current_rank']}**\n\n"
+                f"{db_saved_msg}\n\n"
+                f"View all event scorecards in your [Judge Scoring Console](/judge/scoring)."
+            )
+
+        # ACTION 2: Show my assigned events (Judge role)
+        if any(k in lower for k in ["assigned", "my event", "my events", "events i judge", "what do i judge"]):
+            if user_id:
+                assigned = get_judge_assigned_events(user_id)
+                if assigned:
+                    lines = []
+                    for a in assigned:
+                        lines.append(
+                            f"• **{a['title']}** ({a['category']})\n"
+                            f"  - Venue: {a['venue']} | Time: {a['time']}\n"
+                            f"  - Submissions: {a['total_submissions']} total ({a['evaluated_submissions']} evaluated, {a['pending_submissions']} pending)"
+                        )
+                    return (
+                        f"### ⚖️ Your Assigned Judging Competitions\n\n"
+                        f"{greeting}! Here are your designated evaluation panels from the database:\n\n"
+                        + "\n\n".join(lines)
+                        + f"\n\nTo score a submission, tell me *'Calculate scores for [Team] in {assigned[0]['title']}: Innovation 25, Technical 24...'*."
+                    )
+
+        # ACTION 3: Show live event rankings / leaderboards
+        if any(k in lower for k in ["rank", "ranking", "rankings", "leaderboard", "standing", "standings"]):
+            live_standings = get_live_event_results(question)
+            if live_standings:
+                ev_title = live_standings[0].get("event", "Event")
+                stand_lines = "\n".join(
+                    f"• **{s['position']}**: {s['team_name']} — Score: **{s['total_score']} pts**"
+                    for s in live_standings
+                )
+                return (
+                    f"### 🏆 Live Leaderboard: {ev_title}\n\n"
+                    f"Current ranked standings computed from judge evaluations:\n\n"
+                    f"{stand_lines}\n\n"
+                    f"Full real-time rankings are published at [/results](/results)."
+                )
+
+        # Default Judging Rubric
         rubric_data = get_evaluation_rubric("Technical")
         rubric_items = rubric_data.get("rubric", {})
-        criteria_str = "\n".join(f"• **{name}**: {pts} pts" for name, pts in rubric_items.items())
+        crit_str = "\n".join(f"• **{name}**: {pts} pts" for name, pts in rubric_items.items())
         return (
-            f"### Official Judging Rubric ({rubric_data.get('category', 'Technical')})\n\n"
-            f"{criteria_str}\n\n"
-            f"Scores are calculated out of {rubric_data.get('max_score', 100)} total points. "
-            f"Evaluations are recorded live into the FESTORA database by authorized judges."
+            f"### ⚖️ Official EventX Judging Rubric\n\n"
+            f"{crit_str}\n\n"
+            f"• **Total Scale**: Maximum {rubric_data.get('max_score', 100)} points.\n\n"
+            f"As a Judge, you can tell me: *'Calculate scores for Team Alpha in Hackathon: Innovation 24, Technical 25, Presentation 22'* "
+            f"and I will automatically compute the weighted percentages, assign leader rankings, and save the marks to the database."
         )
 
+    # -------------------------------------------------------------
+    # 5. RESULT & CERTIFICATE AGENT
+    # -------------------------------------------------------------
     elif agent_type == "result_cert_agent":
-        # Check if recipient or event mentioned
         live_standings = get_live_event_results(question)
         if live_standings:
             winner = live_standings[0]
             cert = generate_certificate_text(winner["team_name"], winner["event"], "1st Place Winner")
             return (
-                f"🏆 **Official Winner Announcement & Certificate Verification**\n\n"
-                f"**Event**: {winner['event']}\n"
-                f"**Winner**: {winner['team_name']} ({winner['position']})\n"
-                f"**Score**: {winner['total_score']}\n\n"
-                f"📜 **Generated Certificate Text**:\n"
+                f"### 🏆 Official Result Announcement\n\n"
+                f"• **Event**: {winner['event']}\n"
+                f"• **First Place Winner**: **{winner['team_name']}** ({winner['total_score']} pts)\n\n"
+                f"📜 **Generated Certificate Credential**:\n"
                 f"> \"{cert['certificate_body']}\"\n\n"
-                f"Verification ID: `{cert['certificate_id']}`"
+                f"• Verification Hash: `{cert['certificate_id']}`\n"
+                f"Verify credentials publicly anytime at [/verify-certificate](/verify-certificate)."
             )
         return (
-            f"🏆 **FESTORA Official Result & Certificate Announcement**\n\n"
-            f"Certificates of Participation and Excellence are officially issued to all verified attendees and winners. "
-            f"Each certificate includes an authentic tamper-proof Certificate Verification ID, verifiable publicly via the FESTORA portal."
+            f"🏆 **EventX Official Results & Digital Credentials**\n\n"
+            f"All winners and verified attendees receive tamper-proof cryptographic certificates. "
+            f"You can verify any certificate using its QR code hash or ID at [/verify-certificate](/verify-certificate) "
+            f"or inspect live competition rankings at [/results](/results)."
         )
 
+    # -------------------------------------------------------------
+    # 6. OPERATIONS & ANALYTICS AGENT
+    # -------------------------------------------------------------
     elif agent_type == "sponsor_analytics_agent":
         analytics = get_fest_analytics()
         s = analytics["overview"]
         return (
-            f"📊 **FESTORA Real-Time Analytics Report**\n\n"
-            f"• **Registered Participants**: {s['total_registered_students']:,}\n"
-            f"• **Total Active Events**: {s['total_events']}\n"
-            f"• **Registration Revenue**: Rs. {s['total_revenue_inr']:,}\n"
-            f"• **Sponsorship Capital**: Rs. {s['sponsor_funds_inr']:,}\n"
-            f"• **QR Gate Check-in Rate**: {s['checkin_rate_percent']}%\n\n"
-            f"Corporate sponsor deliverables and booth traffic tracking are operational."
+            f"### 📊 EventX Real-Time Festival Analytics\n\n"
+            f"• **Registered Students**: {s['total_registered_students']:,}\n"
+            f"• **Active Catalog Events**: {s['total_events']}\n"
+            f"• **Participant Registration Revenue**: ₹{s['total_revenue_inr']:,}\n"
+            f"• **Gate Check-In / Attendance Rate**: {s['checkin_rate_percent']}%\n\n"
+            f"Explore comprehensive fiscal breakdowns in the [Financials & Revenue Console](/admin/revenue)."
         )
 
+    # -------------------------------------------------------------
+    # 7. FAQ & COMPREHENSIVE WEBSITE HELPDESK
+    # -------------------------------------------------------------
     else:
+        # Personalized role recommendations
+        role_greeting = f"{greeting}! Welcome to EventX."
+        role_hints = ""
+
+        if role == "judge":
+            role_hints = (
+                f"\n\n⚖️ **Judge Actions Available**:\n"
+                f"• Ask *'What events am I judging?'* to view your assigned panels.\n"
+                f"• Ask *'Calculate scores for [Team]: 25, 24, 22'* to compute scores and update the database.\n"
+                f"• Access your full evaluation console at [/judge/scoring](/judge/scoring)."
+            )
+        elif role == "student":
+            role_hints = (
+                f"\n\n🎓 **Student Actions Available**:\n"
+                f"• Ask *'Register me for [Event Name]'* to register instantly.\n"
+                f"• Ask *'Show my registrations'* or *'Show my passes'* to inspect digital passes.\n"
+                f"• Access your dashboard at [/student/dashboard](/student/dashboard)."
+            )
+        elif role == "event_coordinator":
+            role_hints = (
+                f"\n\n🛡️ **Coordinator Actions Available**:\n"
+                f"• Ask *'Check in REG-101'* to mark gate attendance.\n"
+                f"• Ask *'Check schedule clash for [Event]'* to inspect overlaps.\n"
+                f"• Access your command portal at [/coordinator/dashboard](/coordinator/dashboard)."
+            )
+        elif role == "admin":
+            role_hints = (
+                f"\n\n👑 **Admin Console Actions Available**:\n"
+                f"• Review pending Coordinator & Judge applications at [/admin/applications](/admin/applications).\n"
+                f"• Issue cryptographic Judge invitations at [/admin/applications](/admin/applications).\n"
+                f"• View system audit trail at [/admin/audit-logs](/admin/audit-logs)."
+            )
+
         return (
-            f"Welcome to the FESTORA Helpdesk! 🎓\n\n"
-            f"• **Registration Desk**: Student Activity Center, Desk #2\n"
-            f"• **UPI Payments**: Verified automatically within 60 seconds; keep your Transaction ID handy.\n"
-            f"• **Lost & Found / Medical**: Campus Health Center near Gate 1\n"
-            f"• **Gate Entry**: Show your digital Fest Pass QR code at the entrance."
+            f"{role_greeting}\n\n"
+            f"**EventX Complete Portal Navigation**:\n\n"
+            f"• 🎪 **Festival Catalog**: [Browse Events](/events) | [Fest Schedule](/schedule) | [Campus Venues](/venues)\n"
+            f"• 🏆 **Live Results**: [Leaderboards & Winners](/results) | [Verify Certificates](/verify-certificate)\n"
+            f"• 📢 **Announcements**: [Campus Broadcasts](/announcements)\n\n"
+            f"**Account & Registration Workflows**:\n"
+            f"• 🎓 **Student Registration**: Public signup at [/register](/register) (strictly assigns Student role).\n"
+            f"• 🛡️ **Event Coordinator**: Apply with faculty & experience at [/apply/coordinator](/apply/coordinator) (reviewed & approved by Admin).\n"
+            f"• ⚖️ **Fest Judge**: Apply for official judging panel at [/apply/judge](/apply/judge) or redeem invitation token at [/invite/accept](/invite/accept).\n"
+            + role_hints
         )
 
 
 # =====================================================================
-# 1. SUPERVISOR AGENT
+# AGENT NODES
 # =====================================================================
 
 def supervisor_agent(state: AgentState) -> Dict[str, Any]:
@@ -228,7 +582,7 @@ def supervisor_agent(state: AgentState) -> Dict[str, Any]:
     attempt = state.get("attempts", 0)
 
     prompt = f"""
-You are the Supervisor Agent of the Modern College Fest Management System.
+You are the Supervisor Agent of EventX College Fest Management System.
 
 USER ROLE:
 {user_role}
@@ -238,11 +592,11 @@ USER REQUEST:
 
 Analyze the request and route to ONLY ONE of the following specialized agents:
 - event_agent: Event details, schedules, timings, venues, rules, schedule clashes.
-- participant_agent: Team registration, team size limits, member validation, QR entry pass, gate attendance.
-- judging_agent: Scoring rubrics, judge evaluations, score calculations, team rankings.
+- participant_agent: Event registration, student registration action, team size limits, QR entry pass, gate attendance, my passes.
+- judging_agent: Scoring rubrics, judge evaluations, score calculations, calculate marks, team rankings, assigned judging panels.
 - result_cert_agent: Publishing results, winner announcements, generating certificate text.
 - sponsor_analytics_agent: Fest revenue, participant counts, footfall, sponsor packages and reports.
-- faq_agent: General helpdesk, UPI payment issues, campus locations, directions.
+- faq_agent: Website navigation, registration procedures, roles, campus locations, helpdesk.
 
 Return ONLY the agent name (one of: event_agent, participant_agent, judging_agent, result_cert_agent, sponsor_analytics_agent, faq_agent).
 Do not use markdown fences.
@@ -277,10 +631,6 @@ Do not use markdown fences.
     }
 
 
-# =====================================================================
-# 2. EVENT MANAGEMENT AGENT
-# =====================================================================
-
 def event_management_agent(state: AgentState) -> Dict[str, Any]:
     question = state["question"]
     attempt = state.get("attempts", 0)
@@ -290,31 +640,15 @@ def event_management_agent(state: AgentState) -> Dict[str, Any]:
     matched_event = get_event_details(question)
 
     prompt = f"""
-You are the Event Management Agent of the College Fest Management System.
-
-USER INQUIRY:
-{question}
-
-EVENT CATALOG DATA:
-{all_events}
-
-MATCHED EVENT DETAILS:
-{matched_event}
-
-Requirements:
-1. Provide accurate event schedules, venues, and timings.
-2. Clearly explain event rules and team size constraints.
-3. If the user asks about schedule conflicts, specify whether timings or venues overlap.
-4. Keep the answer structured, polite, and helpful for students and coordinators.
-
-Return the final formatted answer.
-Do not use markdown fences.
+You are the Event Management Agent of EventX.
+USER INQUIRY: {question}
+EVENT DATA: {matched_event or all_events[:5]}
+Respond politely with complete event schedules, venue locations, team requirements, and rules.
 """
-
     answer = invoke_llm(prompt, "event_agent", state)
 
     new_history = list(history)
-    new_history.append("Event Management Agent resolved request")
+    new_history.append("Event Management Agent processed request")
 
     return {
         "agent_response": answer,
@@ -324,49 +658,39 @@ Do not use markdown fences.
     }
 
 
-# =====================================================================
-# 3. PARTICIPANT & TEAM AGENT
-# =====================================================================
-
 def participant_team_agent(state: AgentState) -> Dict[str, Any]:
     question = state["question"]
     attempt = state.get("attempts", 0)
     history = state.get("history", [])
+    context = state.get("event_context", {})
 
     tools_context = {}
-    if "REG-" in question.upper():
-        words = question.upper().split()
-        for w in words:
-            if "REG-" in w:
-                tools_context["registration_status"] = check_registration_status(w)
-                break
-    
-    if "PASS-" in question.upper():
-        words = question.upper().split()
-        for w in words:
-            if "PASS-" in w:
-                tools_context["qr_pass_validation"] = verify_qr_entry_pass(w)
-                break
+    lower = question.lower()
+
+    # Pre-execute actions if detected
+    if any(k in lower for k in ["register me", "register for", "sign me up", "enroll me", "i want to register", "join event"]):
+        target = parse_registration_target(question)
+        if target:
+            tools_context["action_result"] = register_student_for_event(
+                event_name_or_id=target,
+                user_id=context.get("user_id"),
+                user_email=context.get("user_email")
+            )
+
+    if any(k in lower for k in ["my registration", "my registrations", "my pass", "my passes", "what events am i", "my events"]):
+        tools_context["my_registrations"] = get_user_registrations(
+            user_id=context.get("user_id"),
+            user_email=context.get("user_email")
+        )
+
+    state["tool_outputs"] = tools_context
 
     prompt = f"""
-You are the Participant and Team Agent of the College Fest Management System.
-
-USER INQUIRY:
-{question}
-
-SYSTEM REGISTRATION & ENTRY CONTEXT:
-{tools_context}
-
-Requirements:
-1. Assist students with event registration, team formation, and member limits.
-2. Explain QR entry pass requirements and gate check-in rules.
-3. If payment or registration details are referenced, provide clear guidance.
-4. Ensure instructions are welcoming and easy to follow.
-
-Return the final formatted answer.
-Do not use markdown fences.
+You are the Participant and Team Agent of EventX.
+USER INQUIRY: {question}
+CONTEXT & ACTIONS EXECUTED: {tools_context}
+Answer accurately and confirm any registrations or passes.
 """
-
     answer = invoke_llm(prompt, "participant_agent", state)
 
     new_history = list(history)
@@ -380,44 +704,37 @@ Do not use markdown fences.
     }
 
 
-# =====================================================================
-# 4. JUDGING & EVALUATION AGENT
-# =====================================================================
-
 def judging_evaluation_agent(state: AgentState) -> Dict[str, Any]:
     question = state["question"]
     attempt = state.get("attempts", 0)
     history = state.get("history", [])
-    event_context = state.get("event_context", {})
+    context = state.get("event_context", {})
 
-    rubric = get_evaluation_rubric("Technical")
-    scores_data = event_context.get("scores_list", [])
-    rankings_data = []
-    if scores_data:
-        rankings_data = calculate_rankings(scores_data)
+    tools_context = {}
+    lower = question.lower()
+
+    if any(k in lower for k in ["calculate", "score", "scores", "marks", "grade", "points", "evaluate"]) and re.search(r'\d+', question):
+        ev_name, team_name, scores_dict = parse_score_inputs(question)
+        tools_context["score_calculation"] = calculate_and_record_scores(
+            event_name_or_id=ev_name or "Event",
+            team_or_reg_identifier=team_name or "Team Alpha",
+            scores_dict=scores_dict,
+            judge_id=context.get("user_id"),
+            remarks="Evaluated via Fest AI Judge Copilot"
+        )
+
+    if any(k in lower for k in ["assigned", "my event", "my events", "events i judge"]):
+        if context.get("user_id"):
+            tools_context["assigned_events"] = get_judge_assigned_events(context.get("user_id"))
+
+    state["tool_outputs"] = tools_context
 
     prompt = f"""
-You are the Judging & Evaluation Agent of the College Fest Management System.
-
-USER INQUIRY:
-{question}
-
-OFFICIAL EVALUATION CRITERIA:
-{rubric}
-
-COMPUTED RANKINGS DATA (IF APPLICABLE):
-{rankings_data}
-
-Requirements:
-1. Assist judges with marking criteria, rubric breakdown, and scoring weights.
-2. If scores are provided, present a clear leaderboard with 1st, 2nd, and 3rd positions.
-3. Provide constructive remarks and ensure evaluation fairness.
-4. Maintain a formal, professional tone suitable for academic judging panels.
-
-Return the final formatted answer.
-Do not use markdown fences.
+You are the Judging & Evaluation Agent of EventX.
+USER INQUIRY: {question}
+EVALUATION RESULTS & CONTEXT: {tools_context}
+Present detailed marks, weightages, criteria, and leader rankings.
 """
-
     answer = invoke_llm(prompt, "judging_agent", state)
 
     new_history = list(history)
@@ -425,66 +742,29 @@ Do not use markdown fences.
 
     return {
         "agent_response": answer,
-        "tool_outputs": {"rankings": rankings_data, "rubric": rubric},
+        "tool_outputs": tools_context,
         "history": new_history,
         "attempts": attempt + 1
     }
 
-
-# =====================================================================
-# 5. RESULT & CERTIFICATE AGENT
-# =====================================================================
 
 def result_cert_agent(state: AgentState) -> Dict[str, Any]:
     question = state["question"]
     attempt = state.get("attempts", 0)
     history = state.get("history", [])
-    event_context = state.get("event_context", {})
 
-    recipient = event_context.get("recipient", "Student Participant")
-    event_name = event_context.get("event_name", "TechFest Event")
-    position = event_context.get("position", "1st Place Winner")
-
-    cert_data = generate_certificate_text(recipient, event_name, position)
-    announcement_sample = draft_announcement(f"Winners Announced: {event_name}", f"Congratulations to {recipient}!")
-
-    prompt = f"""
-You are the Result and Certificate Agent of the College Fest Management System.
-
-USER INQUIRY:
-{question}
-
-CERTIFICATE TEMPLATE CONTEXT:
-{cert_data}
-
-ANNOUNCEMENT FORMAT CONTEXT:
-{announcement_sample}
-
-Requirements:
-1. Generate official, publication-ready result announcements or certificate text.
-2. Include certificate verification ID, recipient name, event name, and position achieved.
-3. Maintain an exciting, celebratory, and prestigious tone.
-
-Return the final formatted text.
-Do not use markdown fences.
-"""
-
+    prompt = f"You are the Result & Certificate Agent of EventX. User question: {question}."
     answer = invoke_llm(prompt, "result_cert_agent", state)
 
     new_history = list(history)
-    new_history.append("Result & Certificate Agent prepared publication")
+    new_history.append("Result & Certificate Agent processed request")
 
     return {
         "agent_response": answer,
-        "tool_outputs": {"certificate": cert_data},
         "history": new_history,
         "attempts": attempt + 1
     }
 
-
-# =====================================================================
-# 6. SPONSOR & ANALYTICS AGENT
-# =====================================================================
 
 def sponsor_analytics_agent(state: AgentState) -> Dict[str, Any]:
     question = state["question"]
@@ -492,71 +772,30 @@ def sponsor_analytics_agent(state: AgentState) -> Dict[str, Any]:
     history = state.get("history", [])
 
     analytics = get_fest_analytics()
-    sponsors = get_sponsor_reports()
-
-    prompt = f"""
-You are the Sponsor & Analytics Agent of the College Fest Management System.
-
-USER INQUIRY:
-{question}
-
-CURRENT FEST ANALYTICS:
-{analytics}
-
-ACTIVE SPONSORSHIPS:
-{sponsors}
-
-Requirements:
-1. Provide clear reporting on participant counts, revenue collected, and gate check-in rates.
-2. Outline sponsorship tier benefits, deliverable commitments, and funding summaries.
-3. Format figures clearly (e.g. INR currency, percentages).
-4. Deliver insights tailored for College Fest Admins and Corporate Sponsors.
-
-Return the final formatted report.
-Do not use markdown fences.
-"""
-
+    prompt = f"You are the Sponsor & Analytics Agent of EventX. User query: {question}. Stats: {analytics}."
     answer = invoke_llm(prompt, "sponsor_analytics_agent", state)
 
     new_history = list(history)
-    new_history.append("Sponsor & Analytics Agent generated report")
+    new_history.append("Sponsor & Analytics Agent processed request")
 
     return {
         "agent_response": answer,
-        "tool_outputs": {"analytics": analytics, "sponsors": sponsors},
+        "tool_outputs": analytics,
         "history": new_history,
         "attempts": attempt + 1
     }
 
-
-# =====================================================================
-# 7. GENERAL FAQ & HELPDESK AGENT
-# =====================================================================
 
 def faq_helpdesk_agent(state: AgentState) -> Dict[str, Any]:
     question = state["question"]
     attempt = state.get("attempts", 0)
     history = state.get("history", [])
 
-    prompt = f"""
-You are the General FAQ & Helpdesk Agent for the College Fest.
-
-USER INQUIRY:
-{question}
-
-Guidelines:
-1. Assist users with general fest inquiries (UPI payment proof submission, campus entry points, lost & found, emergency contacts).
-2. Advise that registration queries can be resolved at Student Activity Center Desk #2.
-3. Be warm, welcoming, and concise.
-
-Return the helpful response.
-Do not use markdown fences.
-"""
-
+    prompt = f"You are the Campus Helpdesk & Navigation Agent of EventX. User question: {question}."
     answer = invoke_llm(prompt, "faq_agent", state)
 
     new_history = list(history)
-    new_history.append("FAQ Helpdesk Agent assisted user")
+    new_history.append("Campus Helpdesk Agent processed request")
 
     return {
         "agent_response": answer,

@@ -36,10 +36,10 @@ export const PublicLayout = () => {
             </div>
             <div>
               <span className="text-base font-extrabold tracking-tight text-white block leading-none">
-                CAMPUS<span className="text-amber-400">FEST</span>
+                IIITK<span className="text-amber-400">EVENTX</span>
               </span>
               <span className="text-[10px] tracking-wider uppercase text-slate-400 font-semibold block mt-0.5">
-                University Fest Portal
+                IIITK FEST USTAV 
               </span>
             </div>
           </Link>

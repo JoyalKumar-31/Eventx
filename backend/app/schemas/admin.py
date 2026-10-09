@@ -10,7 +10,7 @@ class AdminDashboardStats(BaseModel):
     total_registrations: int
     total_attendance: int
     total_revenue: float
-    total_sponsors: int
+    total_sponsors: int = 0
     events_by_category: Dict[str, int] = {}
     registrations_by_status: Dict[str, int] = {}
     recent_registrations: int = 0

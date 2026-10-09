@@ -206,7 +206,7 @@ export default function FestAICopilot() {
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-950"></span>
           </span>
           <Sparkles className="w-4 h-4 text-slate-950 animate-pulse" />
-          <span className="tracking-wide uppercase font-black text-[11px]">Fest AI Copilot</span>
+          <span className="tracking-wide uppercase font-black text-[11px]">EVENTX AI </span>
         </button>
       </div>
 

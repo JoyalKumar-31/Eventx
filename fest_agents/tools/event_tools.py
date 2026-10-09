@@ -219,10 +219,14 @@ def get_event_details(event_name: str) -> Optional[Dict[str, Any]]:
     clean_name = event_name.lower().replace(" ", "").replace("-", "")
     for key, event in FEST_EVENTS_DB.items():
         if key in clean_name or clean_name in key or event["title"].lower().replace(" ", "") in clean_name:
-            return event
+            c = dict(event)
+            c["is_team_event"] = event.get("min_team_size", 1) > 1
+            return c
     for key, event in FEST_EVENTS_DB.items():
         if any(word in event["title"].lower() for word in event_name.lower().split()):
-            return event
+            c = dict(event)
+            c["is_team_event"] = event.get("min_team_size", 1) > 1
+            return c
     return None
 
 

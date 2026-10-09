@@ -122,13 +122,22 @@ export const LoginPage = () => {
             </button>
           </form>
 
-          <div className="mt-6 pt-5 border-t border-slate-800 text-center">
+          <div className="mt-6 pt-5 border-t border-slate-800 text-center space-y-2">
             <p className="text-xs text-slate-400">
               Don't have an account yet?{" "}
               <Link to="/register" className="font-semibold text-amber-400 hover:text-amber-300">
-                Register here
+                Register as Student
               </Link>
             </p>
+            <div className="flex items-center justify-center gap-4 text-[11px] text-slate-400 pt-1">
+              <Link to="/apply/coordinator" className="hover:text-amber-400 underline underline-offset-4">
+                Apply as Coordinator
+              </Link>
+              <span>•</span>
+              <Link to="/apply/judge" className="hover:text-purple-400 underline underline-offset-4">
+                Apply as Fest Judge
+              </Link>
+            </div>
           </div>
         </div>
       </div>

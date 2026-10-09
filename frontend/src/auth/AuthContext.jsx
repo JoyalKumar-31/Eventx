@@ -84,6 +84,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const setAuthSession = (tokenStr, userObj) => {
+    localStorage.setItem("token", tokenStr);
+    localStorage.setItem("user", JSON.stringify(userObj));
+    setToken(tokenStr);
+    setUser(userObj);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -96,6 +103,7 @@ export const AuthProvider = ({ children }) => {
         register,
         logout,
         refreshUser,
+        setAuthSession,
       }}
     >
       {children}

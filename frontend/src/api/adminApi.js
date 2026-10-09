@@ -37,4 +37,42 @@ export const adminApi = {
     const res = await apiClient.get("/users/judges");
     return res.data;
   },
+  getCoordinatorApplications: async (status) => {
+    const params = status ? { status } : {};
+    const res = await apiClient.get("/admin/applications/coordinators", { params });
+    return res.data;
+  },
+  approveCoordinatorApplication: async (id, notes) => {
+    const res = await apiClient.post(`/admin/applications/coordinators/${id}/approve`, { admin_notes: notes });
+    return res.data;
+  },
+  rejectCoordinatorApplication: async (id, notes) => {
+    const res = await apiClient.post(`/admin/applications/coordinators/${id}/reject`, { admin_notes: notes });
+    return res.data;
+  },
+  getJudgeApplications: async (status) => {
+    const params = status ? { status } : {};
+    const res = await apiClient.get("/admin/applications/judges", { params });
+    return res.data;
+  },
+  approveJudgeApplication: async (id, notes) => {
+    const res = await apiClient.post(`/admin/applications/judges/${id}/approve`, { admin_notes: notes });
+    return res.data;
+  },
+  rejectJudgeApplication: async (id, notes) => {
+    const res = await apiClient.post(`/admin/applications/judges/${id}/reject`, { admin_notes: notes });
+    return res.data;
+  },
+  createInvitation: async (data) => {
+    const res = await apiClient.post("/admin/invitations", data);
+    return res.data;
+  },
+  getInvitations: async (params = {}) => {
+    const res = await apiClient.get("/admin/invitations", { params });
+    return res.data;
+  },
+  revokeInvitation: async (id) => {
+    const res = await apiClient.delete(`/admin/invitations/${id}`);
+    return res.data;
+  },
 };
