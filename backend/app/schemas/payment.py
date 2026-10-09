@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from app.models.enums import PaymentStatus
 
 
@@ -43,8 +43,22 @@ class PaymentResponse(BaseModel):
     transaction_id: Optional[str] = None
     payment_gateway: str
     gateway_order_id: Optional[str] = None
+    order_id: Optional[str] = None
     payment_method: Optional[str] = None
     paid_at: Optional[datetime] = None
     failure_reason: Optional[str] = None
     created_at: datetime
+    event_title: Optional[str] = None
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
     invoice: Optional[InvoiceResponse] = None
+    invoices: List[InvoiceResponse] = []
+    registration: Optional[Any] = None
+
+    @model_validator(mode="after")
+    def populate_aliases(self):
+        if not self.order_id:
+            self.order_id = self.gateway_order_id
+        if self.invoice and not self.invoices:
+            self.invoices = [self.invoice]
+        return self

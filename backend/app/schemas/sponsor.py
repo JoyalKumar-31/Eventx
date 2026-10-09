@@ -5,11 +5,22 @@ from app.models.enums import SponsorshipTier, SponsorshipStatus, PromotionSlotTy
 
 
 class SponsorshipPlanCreate(BaseModel):
-    name: str
+    name: Optional[str] = None
     tier: SponsorshipTier
     price: float
-    benefits_description: str
-    max_slots: int = 5
+    benefits_description: Optional[str] = None
+    description: Optional[str] = None
+    max_slots: Optional[int] = None
+    max_sponsors: Optional[int] = None
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.name:
+            self.name = f"{self.tier.value if hasattr(self.tier, 'value') else self.tier} Tier Plan"
+        if not self.benefits_description:
+            self.benefits_description = self.description or "Official festival sponsorship and branding entitlements."
+        if self.max_slots is None:
+            self.max_slots = self.max_sponsors or 5
 
 
 class SponsorshipPlanResponse(BaseModel):
@@ -26,11 +37,14 @@ class SponsorshipPlanResponse(BaseModel):
 
 
 class PromotionSlotCreate(BaseModel):
-    sponsorship_id: int
+    sponsorship_id: Optional[int] = None
     slot_type: PromotionSlotType = PromotionSlotType.BANNER
-    title: str
+    title: Optional[str] = None
+    slot_name: Optional[str] = None
     asset_url: Optional[str] = None
+    banner_image_url: Optional[str] = None
     target_url: Optional[str] = None
+    priority: Optional[int] = 1
 
 
 class PromotionSlotResponse(BaseModel):
@@ -40,11 +54,20 @@ class PromotionSlotResponse(BaseModel):
     sponsorship_id: int
     slot_type: PromotionSlotType
     title: str
+    slot_name: Optional[str] = None
     asset_url: Optional[str] = None
+    banner_image_url: Optional[str] = None
     target_url: Optional[str] = None
     impressions_count: int
     clicks_count: int
     is_active: bool
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.slot_name:
+            self.slot_name = self.title
+        if not self.banner_image_url:
+            self.banner_image_url = self.asset_url
 
 
 class SponsorshipCreate(BaseModel):

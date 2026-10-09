@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Sparkles, Menu, X, LogOut, User as UserIcon, ChevronRight } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { NotificationCenter } from "../components/NotificationCenter";
+import FestAICopilot from "../components/FestAICopilot";
 
 export const DashboardLayout = ({ title, navItems, roleColor = "indigo" }) => {
   const { user, logout } = useAuth();
@@ -39,12 +40,12 @@ export const DashboardLayout = ({ title, navItems, roleColor = "indigo" }) => {
           {/* Brand */}
           <div className="flex items-center justify-between">
             <Link to="/" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-indigo-600/30">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-amber-400 to-yellow-300 flex items-center justify-center text-slate-950 shadow-md shadow-amber-500/30">
                 <Sparkles className="w-4 h-4" />
               </div>
               <div>
                 <span className="text-sm font-extrabold tracking-tight text-white block leading-none">
-                  CAMPUS<span className="text-indigo-400">FEST</span>
+                  IIITK<span className="text-amber-400">EVENTX</span>
                 </span>
                 <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">
                   {title}
@@ -72,7 +73,7 @@ export const DashboardLayout = ({ title, navItems, roleColor = "indigo" }) => {
                   onClick={() => setSidebarOpen(false)}
                   className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                     active
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+                      ? "bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20"
                       : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/80"
                   }`}
                 >
@@ -92,7 +93,7 @@ export const DashboardLayout = ({ title, navItems, roleColor = "indigo" }) => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-white truncate">{user?.full_name}</p>
-              <span className="text-[10px] font-semibold text-indigo-400 truncate block">
+              <span className="text-[10px] font-semibold text-amber-400 truncate block">
                 {user?.role}
               </span>
             </div>
@@ -141,6 +142,9 @@ export const DashboardLayout = ({ title, navItems, roleColor = "indigo" }) => {
           <Outlet />
         </main>
       </div>
+
+      {/* Fest AI Multi-Agent Copilot */}
+      <FestAICopilot />
     </div>
   );
 };

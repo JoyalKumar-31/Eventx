@@ -91,6 +91,13 @@ class PaymentService:
                 reg = db.query(Registration).filter(Registration.id == payment.registration_id).first()
                 if reg:
                     reg.status = RegistrationStatus.CONFIRMED
+                    if reg.team_id:
+                        team_regs = db.query(Registration).filter(
+                            Registration.event_id == reg.event_id,
+                            Registration.team_id == reg.team_id
+                        ).all()
+                        for tr in team_regs:
+                            tr.status = RegistrationStatus.CONFIRMED
 
             # Generate Invoice
             user = db.query(User).filter(User.id == payment.user_id).first()

@@ -75,15 +75,16 @@ def get_live_event_results(event_name_or_id: str) -> List[Dict[str, Any]]:
     Retrieves live evaluated results or published rankings for an event from MySQL.
     """
     try:
-        from app.core.database import SessionLocal
+        from app.db.session import SessionLocal
         from app.models.event import Event
-        from app.models.judging import EventResult, Evaluation
-        from app.models.team import Team
+        from app.models.judging import Result, Score
+        from app.models.enums import EventStatus
+        from sqlalchemy import func
 
         db = SessionLocal()
         try:
             clean = event_name_or_id.lower().strip()
-            db_events = db.query(Event).filter(Event.is_active == True).all()
+            db_events = db.query(Event).filter(Event.status != EventStatus.DRAFT).all()
             ev = None
             # 1. Exact ID
             for e in db_events:
@@ -93,44 +94,57 @@ def get_live_event_results(event_name_or_id: str) -> List[Dict[str, Any]]:
             # 2. Name substring or keyword
             if not ev:
                 for e in db_events:
-                    e_name = e.name.lower()
-                    if e_name in clean or any(w in clean for w in e_name.split() if len(w) > 3):
+                    e_name = e.title.lower()
+                    if clean in e_name or e_name in clean or any(w in clean for w in e_name.split() if len(w) > 3):
                         ev = e
                         break
 
             if ev:
-                # 1. Check published EventResult
-                results = db.query(EventResult).filter(EventResult.event_id == ev.id).order_by(EventResult.rank.asc()).all()
+                # 1. Check published Result records
+                results = db.query(Result).filter(Result.event_id == ev.id).order_by(Result.rank.asc()).all()
                 if results:
                     positions = ["1st Place (Winner)", "2nd Place (Runner Up)", "3rd Place (2nd Runner Up)"]
                     ranked = []
                     for idx, r in enumerate(results):
-                        pos_label = positions[idx] if idx < len(positions) else f"Rank #{r.rank}"
+                        pos_label = r.award_title or (positions[idx] if idx < len(positions) else f"Rank #{r.rank}")
+                        team_or_user = r.registration.team.name if (r.registration and r.registration.team) else (
+                            r.registration.user.full_name if (r.registration and r.registration.user) else f"Entry #{r.registration_id}"
+                        )
                         ranked.append({
                             "rank": r.rank,
                             "position": pos_label,
-                            "team_name": r.team.name if r.team else f"Team #{r.team_id}",
-                            "total_score": float(r.average_score),
-                            "event": ev.name,
+                            "team_name": team_or_user,
+                            "total_score": float(r.total_score),
+                            "event": ev.title,
                             "is_published": r.is_published
                         })
                     return ranked
 
-                # 2. Check live evaluations
-                evals = db.query(Evaluation).filter(Evaluation.event_id == ev.id).all()
-                if evals:
-                    scores_list = []
-                    for ev_item in evals:
-                        scores_list.append({
-                            "team_name": ev_item.team.name if ev_item.team else f"Team #{ev_item.team_id}",
-                            "scores": {
-                                "innovation": ev_item.innovation,
-                                "technical_execution": ev_item.technical_execution,
-                                "presentation": ev_item.presentation
-                            },
-                            "remarks": ev_item.remarks or "Evaluated"
+                # 2. Check live Score tabulations
+                scores = db.query(
+                    Score.registration_id,
+                    func.sum(Score.score_value).label("total")
+                ).join(Score.judge_assignment).filter(
+                    Score.judge_assignment.has(event_id=ev.id)
+                ).group_by(Score.registration_id).order_by(func.sum(Score.score_value).desc()).all()
+
+                if scores:
+                    from app.models.registration import Registration
+                    positions = ["1st Place (Leader)", "2nd Place", "3rd Place"]
+                    ranked = []
+                    for idx, (reg_id, total) in enumerate(scores):
+                        reg = db.query(Registration).filter(Registration.id == reg_id).first()
+                        team_or_user = reg.team.name if (reg and reg.team) else (reg.user.full_name if (reg and reg.user) else f"Competitor #{reg_id}")
+                        pos_label = positions[idx] if idx < len(positions) else f"Rank #{idx + 1}"
+                        ranked.append({
+                            "rank": idx + 1,
+                            "position": pos_label,
+                            "team_name": team_or_user,
+                            "total_score": round(float(total), 2),
+                            "event": ev.title,
+                            "is_published": False
                         })
-                    return calculate_rankings(scores_list)
+                    return ranked
         finally:
             db.close()
     except Exception:

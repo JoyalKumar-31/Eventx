@@ -38,7 +38,9 @@ export default function SponsorPromotionsPage() {
       setSubmitting(true);
       setFeedback(null);
       await sponsorApi.createPromotion({
+        title: slotName,
         slot_name: slotName,
+        asset_url: bannerUrl.trim(),
         banner_image_url: bannerUrl.trim(),
         target_url: targetUrl.trim(),
         priority: Number(priority),
@@ -124,10 +126,10 @@ export default function SponsorPromotionsPage() {
                 <div>
                   {/* Banner Preview */}
                   <div className="h-36 bg-slate-950 overflow-hidden relative flex items-center justify-center border-b border-slate-800">
-                    {p.banner_image_url ? (
+                    {(p.banner_image_url || p.asset_url) ? (
                       <img
-                        src={p.banner_image_url}
-                        alt={p.slot_name}
+                        src={p.banner_image_url || p.asset_url}
+                        alt={p.slot_name || p.title}
                         className="w-full h-full object-cover"
                       />
                     ) : (
@@ -136,7 +138,7 @@ export default function SponsorPromotionsPage() {
                       </div>
                     )}
                     <span className="absolute top-3 left-3 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-slate-950/80 text-emerald-400 border border-slate-800">
-                      {p.slot_name}
+                      {p.slot_name || p.title}
                     </span>
                   </div>
 

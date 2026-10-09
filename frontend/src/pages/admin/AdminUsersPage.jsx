@@ -9,7 +9,6 @@ const ROLES = [
   "JUDGE",
   "ADMIN",
   "SPONSOR",
-  "GUEST",
 ];
 
 export default function AdminUsersPage() {

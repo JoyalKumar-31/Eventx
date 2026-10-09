@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import {
   Calendar,
   PlusCircle,
@@ -18,6 +18,8 @@ import {
   Clock,
   ArrowLeft,
   ImageIcon,
+  Play,
+  Award,
 } from "lucide-react";
 import { eventApi } from "../../api/eventApi";
 import { publicApi } from "../../api/publicApi";
@@ -387,6 +389,30 @@ export default function CoordinatorEventsPage() {
     } catch (err) {
       console.error("Failed to unpublish event", err);
       alert("Failed to unpublish event.");
+    }
+  };
+
+  const handleStartEvent = async (id) => {
+    if (!window.confirm("Start competition for this event now? This marks the event as ONGOING and unlocks live scorecard submission.")) return;
+    try {
+      await eventApi.startEvent(id);
+      setFormSuccess("Competition started! Judges and coordinators can now submit live scores.");
+      fetchInitialData();
+    } catch (err) {
+      console.error("Failed to start event", err);
+      setFormError(extractErrorMessage(err, "Failed to start event competition."));
+    }
+  };
+
+  const handleCompleteEvent = async (id) => {
+    if (!window.confirm("Mark this event as COMPLETED?")) return;
+    try {
+      await eventApi.completeEvent(id);
+      setFormSuccess("Event marked as COMPLETED!");
+      fetchInitialData();
+    } catch (err) {
+      console.error("Failed to complete event", err);
+      setFormError(extractErrorMessage(err, "Failed to complete event."));
     }
   };
 
@@ -1003,7 +1029,36 @@ export default function CoordinatorEventsPage() {
                         {evt.registrations?.length || 0} / {evt.max_participants || "∞"}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {evt.status === "PUBLISHED" && (
+                            <button
+                              onClick={() => handleStartEvent(evt.id)}
+                              className="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1 transition-all"
+                              title="Start Competition (Mark Ongoing)"
+                            >
+                              <Play className="w-3.5 h-3.5 text-amber-400" /> Start
+                            </button>
+                          )}
+
+                          {evt.status === "ONGOING" && (
+                            <>
+                              <Link
+                                to={`/judge/scoring?event_id=${evt.id}`}
+                                className="px-2.5 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-xs font-semibold flex items-center gap-1 transition-all"
+                                title="Score Competitors"
+                              >
+                                <Award className="w-3.5 h-3.5 text-indigo-400" /> Score
+                              </Link>
+                              <button
+                                onClick={() => handleCompleteEvent(evt.id)}
+                                className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1 transition-all"
+                                title="Mark Competition Completed"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Complete
+                              </button>
+                            </>
+                          )}
+
                           <button
                             onClick={() => navigate(`/coordinator/events?edit=${evt.id}`)}
                             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
@@ -1020,7 +1075,7 @@ export default function CoordinatorEventsPage() {
                             >
                               <XCircle className="w-3.5 h-3.5" />
                             </button>
-                          ) : (
+                          ) : evt.status === "DRAFT" ? (
                             <button
                               onClick={() => handlePublish(evt.id)}
                               className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors"
@@ -1028,7 +1083,7 @@ export default function CoordinatorEventsPage() {
                             >
                               <Globe className="w-3.5 h-3.5" />
                             </button>
-                          )}
+                          ) : null}
 
                           <button
                             onClick={() => handleDelete(evt.id)}

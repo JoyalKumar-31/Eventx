@@ -93,18 +93,31 @@ export default function CoordinatorJudgesPage() {
       setFeedback(null);
       await judgeApi.assignJudge({
         event_id: Number(selectedEventId),
+        judge_id: Number(selectedJudgeUserId),
         judge_user_id: Number(selectedJudgeUserId),
       });
-      setFeedback({ type: "success", text: "Judge assigned successfully!" });
+      setFeedback({ type: "success", text: "Judge assigned to panel successfully!" });
       loadEventJudgingData(Number(selectedEventId));
     } catch (err) {
       console.error("Failed to assign judge", err);
       setFeedback({
         type: "error",
-        text: err.response?.data?.detail || "Could not assign judge.",
+        text: err.response?.data?.detail || err.response?.data?.message || "Could not assign judge.",
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleUnassignJudge = async (assignmentId) => {
+    if (!window.confirm("Remove this judge from the event panel?")) return;
+    try {
+      await judgeApi.unassignJudge(assignmentId);
+      setFeedback({ type: "success", text: "Judge unassigned from event." });
+      loadEventJudgingData(Number(selectedEventId));
+    } catch (err) {
+      console.error("Failed to unassign judge", err);
+      setFeedback({ type: "error", text: "Failed to remove judge assignment." });
     }
   };
 
@@ -118,6 +131,7 @@ export default function CoordinatorJudgesPage() {
         event_id: Number(selectedEventId),
         name: critName.trim(),
         description: critDesc.trim(),
+        max_score: Number(critMaxPoints),
         max_points: Number(critMaxPoints),
         weightage: Number(critWeightage),
       });
@@ -136,6 +150,18 @@ export default function CoordinatorJudgesPage() {
     }
   };
 
+  const handleDeleteCriteria = async (criteriaId) => {
+    if (!window.confirm("Delete this scoring criteria?")) return;
+    try {
+      await judgeApi.deleteCriteria(criteriaId);
+      setFeedback({ type: "success", text: "Evaluation criteria deleted." });
+      loadEventJudgingData(Number(selectedEventId));
+    } catch (err) {
+      console.error("Failed to delete criteria", err);
+      setFeedback({ type: "error", text: "Failed to delete criteria." });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -145,7 +171,7 @@ export default function CoordinatorJudgesPage() {
             Judging Panel & Evaluation Rubrics
           </h1>
           <p className="text-slate-400 text-sm">
-            Appoint verified judges to events and establish standardized scoring rubrics.
+            Appoint certified judges to events and establish standardized scoring rubrics.
           </p>
         </div>
 
@@ -237,12 +263,25 @@ export default function CoordinatorJudgesPage() {
                     className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between text-xs"
                   >
                     <div>
-                      <div className="font-bold text-white">{a.judge_user?.full_name}</div>
-                      <div className="text-[11px] text-slate-400">{a.judge_user?.email}</div>
+                      <div className="font-bold text-white">
+                        {a.judge_name || a.judge_user?.full_name || `Judge #${a.judge_id}`}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {a.judge_user?.email || `Judge ID: ${a.judge_id}`}
+                      </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">
-                      Authorized
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">
+                        Authorized
+                      </span>
+                      <button
+                        onClick={() => handleUnassignJudge(a.id)}
+                        className="p-1 rounded-lg text-slate-500 hover:text-rose-400 transition-colors"
+                        title="Remove Judge"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -334,12 +373,21 @@ export default function CoordinatorJudgesPage() {
                     <div>
                       <div className="font-bold text-white">{c.name}</div>
                       <div className="text-[11px] text-slate-400">
-                        Weightage: {c.weightage}x • Max: {c.max_points} pts
+                        Weightage: {c.weightage}x • Max: {c.max_score || c.max_points} pts
                       </div>
                     </div>
-                    <span className="font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20">
-                      /{c.max_points}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20">
+                        /{c.max_score || c.max_points}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteCriteria(c.id)}
+                        className="p-1 rounded-lg text-slate-500 hover:text-rose-400 transition-colors"
+                        title="Delete Criteria"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))
               )}

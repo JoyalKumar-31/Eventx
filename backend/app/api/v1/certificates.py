@@ -13,19 +13,27 @@ router = APIRouter(prefix="/certificates", tags=["Certificates"])
 
 
 def format_cert_response(c: Certificate) -> CertificateResponse:
+    event_dict = {
+        "id": c.event.id,
+        "title": c.event.title,
+    } if c.event else None
+
     return CertificateResponse(
         id=c.id,
         certificate_number=c.certificate_number,
         registration_id=c.registration_id,
         user_id=c.user_id,
-        participant_name=c.user.full_name,
+        participant_name=c.user.full_name if c.user else "Participant",
         event_id=c.event_id,
-        event_title=c.event.title,
+        event_title=c.event.title if c.event else f"Event #{c.event_id}",
         award_title=c.award_title,
+        certificate_type=c.award_title,
         issue_date=c.issue_date,
+        issued_at=c.issue_date,
         verification_hash=c.verification_hash,
         template_type=c.template_type,
-        pdf_url=f"/api/certificates/{c.id}/download"
+        pdf_url=f"/api/certificates/{c.id}/download",
+        event=event_dict
     )
 
 
@@ -52,8 +60,8 @@ def download_certificate_pdf(
         raise HTTPException(status_code=403, detail="Unauthorized to download this certificate")
 
     pdf_bytes = generate_pdf_certificate_bytes(
-        participant_name=cert.user.full_name,
-        event_title=cert.event.title,
+        participant_name=cert.user.full_name if cert.user else "Participant",
+        event_title=cert.event.title if cert.event else "Fest Competition",
         award_title=cert.award_title,
         cert_number=cert.certificate_number,
         issue_date=cert.issue_date,
@@ -89,16 +97,20 @@ def verify_certificate_authenticity(
         )
 
     college = None
-    if cert.user.student_profile:
+    if cert.user and cert.user.student_profile:
         college = cert.user.student_profile.college_name
 
     return CertificateVerifyResponse(
         is_valid=True,
+        id=cert.id,
         certificate_number=cert.certificate_number,
-        participant_name=cert.user.full_name,
-        event_title=cert.event.title,
+        participant_name=cert.user.full_name if cert.user else "Participant",
+        event_title=cert.event.title if cert.event else "Event",
         award_title=cert.award_title,
+        certificate_type=cert.award_title,
         issue_date=cert.issue_date,
         college_name=college,
+        verification_hash=cert.verification_hash,
+        pdf_url=f"/api/certificates/{cert.id}/download",
         message="Authentic certificate verified against official database."
     )

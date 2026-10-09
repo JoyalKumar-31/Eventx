@@ -26,12 +26,17 @@ export default function AdminAuditLogsPage() {
   };
 
   const filtered = logs.filter((l) => {
+    const action = l.action || "";
+    const resType = l.entity_type || l.resource_type || "";
+    const uName = l.user_name || l.user?.full_name || "";
+    const uEmail = l.user_email || l.user?.email || "";
+
     const matchesSearch =
-      l.action?.toLowerCase().includes(search.toLowerCase()) ||
-      l.resource_type?.toLowerCase().includes(search.toLowerCase()) ||
-      l.user?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-      l.user?.email?.toLowerCase().includes(search.toLowerCase());
-    const matchesAction = actionFilter === "ALL" || l.action === actionFilter;
+      action.toLowerCase().includes(search.toLowerCase()) ||
+      resType.toLowerCase().includes(search.toLowerCase()) ||
+      uName.toLowerCase().includes(search.toLowerCase()) ||
+      uEmail.toLowerCase().includes(search.toLowerCase());
+    const matchesAction = actionFilter === "ALL" || action === actionFilter;
     return matchesSearch && matchesAction;
   });
 
@@ -112,34 +117,45 @@ export default function AdminAuditLogsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {filtered.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="px-6 py-4 font-mono text-slate-400 whitespace-nowrap">
-                      {new Date(log.created_at).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center gap-1 font-mono font-bold text-purple-300 bg-purple-500/10 px-2.5 py-1 rounded-lg border border-purple-500/20 text-[11px]">
-                        <Shield className="w-3 h-3 text-purple-400" />
-                        {log.action}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-white">
-                        {log.user?.full_name || `User #${log.user_id}`}
-                      </div>
-                      <div className="text-[10px] text-slate-500">{log.user?.email}</div>
-                    </td>
-                    <td className="px-6 py-4 font-mono text-slate-300">
-                      {log.resource_type ? `${log.resource_type} #${log.resource_id}` : "N/A"}
-                    </td>
-                    <td className="px-6 py-4 text-slate-400 max-w-xs truncate">
-                      {log.details ? JSON.stringify(log.details) : "--"}
-                    </td>
-                    <td className="px-6 py-4 text-right font-mono text-slate-500 text-[11px]">
-                      {log.ip_address || "127.0.0.1"}
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((log) => {
+                  const timestamp = log.timestamp || log.created_at;
+                  const userName = log.user_name || log.user?.full_name || (log.user_id ? `User #${log.user_id}` : "System/Guest");
+                  const userEmail = log.user_email || log.user?.email;
+                  const resourceType = log.entity_type || log.resource_type;
+                  const resourceId = log.entity_id ?? log.resource_id;
+                  const detailsData = log.new_values || log.details || log.old_values;
+
+                  return (
+                    <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="px-6 py-4 font-mono text-slate-400 whitespace-nowrap">
+                        {timestamp ? new Date(timestamp).toLocaleString() : "--"}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="inline-flex items-center gap-1 font-mono font-bold text-purple-300 bg-purple-500/10 px-2.5 py-1 rounded-lg border border-purple-500/20 text-[11px]">
+                          <Shield className="w-3 h-3 text-purple-400" />
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-white">
+                          {userName}
+                        </div>
+                        {userEmail && (
+                          <div className="text-[10px] text-slate-500">{userEmail}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 font-mono text-slate-300">
+                        {resourceType ? `${resourceType} #${resourceId ?? ""}` : "N/A"}
+                      </td>
+                      <td className="px-6 py-4 text-slate-400 max-w-xs truncate">
+                        {detailsData ? (typeof detailsData === "object" ? JSON.stringify(detailsData) : String(detailsData)) : "--"}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-500 text-[11px]">
+                        {log.ip_address || "127.0.0.1"}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

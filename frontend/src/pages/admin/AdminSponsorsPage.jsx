@@ -39,10 +39,13 @@ export default function AdminSponsorsPage() {
       setSubmitting(true);
       setFeedback(null);
       await sponsorApi.createPlan({
+        name: `${tier} Tier Plan`,
         tier,
         price: Number(price),
         description: description.trim(),
+        benefits_description: description.trim(),
         max_sponsors: Number(maxSponsors),
+        max_slots: Number(maxSponsors),
         benefits: benefits
           ? benefits.split("\n").map((b) => b.trim()).filter(Boolean)
           : [],

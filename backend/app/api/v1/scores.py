@@ -17,7 +17,7 @@ def submit_participant_scores(
     event_id: int,
     submission: ScoreSubmissionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.JUDGE, UserRole.ADMIN))
+    current_user: User = Depends(require_role(UserRole.JUDGE, UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
 ):
     """
     Judges submit/update score per criteria with validation and remarks.

@@ -46,7 +46,7 @@ export default function JudgeScoringPage() {
       const data = await judgeApi.getMyAssignedEvents();
       setAssignedEvents(data || []);
       if (!selectedEventId && data && data.length > 0) {
-        setSelectedEventId(String(data[0].event_id));
+        setSelectedEventId(String(data[0].id || data[0].event_id));
       }
     } catch (err) {
       console.error("Failed to load assigned events", err);
@@ -70,7 +70,8 @@ export default function JudgeScoringPage() {
       // Initialize scores map
       const initial = {};
       (critList || []).forEach((c) => {
-        initial[c.id] = Math.round(c.max_points * 0.7); // default 70%
+        const maxVal = c.max_score || c.max_points || 10;
+        initial[c.id] = Math.round(maxVal * 0.7); // default 70%
       });
       setScores(initial);
       setRemarks("");
@@ -105,6 +106,7 @@ export default function JudgeScoringPage() {
 
       const scorePayload = criteria.map((c) => ({
         criteria_id: c.id,
+        score_value: Number(scores[c.id] || 0),
         score: Number(scores[c.id] || 0),
       }));
 
@@ -130,6 +132,20 @@ export default function JudgeScoringPage() {
   };
 
   const activeParticipant = participants.find((p) => String(p.id) === String(selectedRegId));
+  const selectedEvent = assignedEvents.find(
+    (a) => String(a.id || a.event_id) === String(selectedEventId)
+  );
+
+  const isEventCommenced = () => {
+    if (!selectedEvent) return true;
+    if (selectedEvent.status === "ONGOING" || selectedEvent.status === "COMPLETED") return true;
+    if (selectedEvent.start_time) {
+      const startTime = new Date(selectedEvent.start_time);
+      const now = new Date();
+      if (now >= startTime || now.toDateString() === startTime.toDateString()) return true;
+    }
+    return false;
+  };
 
   return (
     <div className="space-y-6">
@@ -154,14 +170,28 @@ export default function JudgeScoringPage() {
             }}
             className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
           >
-            {assignedEvents.map((a) => (
-              <option key={a.id} value={a.event_id}>
-                {a.event?.title || `Event #${a.event_id}`}
-              </option>
-            ))}
+            {assignedEvents.map((a) => {
+              const eventId = a.id || a.event_id;
+              const title = a.title || a.event?.title || `Event #${eventId}`;
+              return (
+                <option key={a.id} value={eventId}>
+                  {title}
+                </option>
+              );
+            })}
           </select>
         </div>
       </div>
+
+      {!isEventCommenced() && selectedEvent && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 shrink-0 text-amber-400" />
+          <div className="text-xs">
+            <strong className="block font-bold text-white text-sm mb-0.5">Competition Not Commenced</strong>
+            Official judging and scorecards unlock on event day ({new Date(selectedEvent.start_time).toLocaleDateString()}) once the competition has started.
+          </div>
+        </div>
+      )}
 
       {feedback && (
         <div
@@ -202,6 +232,9 @@ export default function JudgeScoringPage() {
             <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
               {participants.map((p) => {
                 const isSelected = String(p.id) === String(selectedRegId);
+                const name = p.participant_name || p.user?.full_name || `Participant #${p.user_id}`;
+                const team = p.team_name || p.team?.name;
+
                 return (
                   <button
                     key={p.id}
@@ -217,15 +250,11 @@ export default function JudgeScoringPage() {
                     }`}
                   >
                     <div className="font-bold text-white text-sm">
-                      {p.user?.full_name || `Participant #${p.user_id}`}
+                      {name}
                     </div>
-                    {p.team && (
-                      <div className="text-xs text-indigo-300 font-semibold mt-0.5">
-                        Team: {p.team.name}
-                      </div>
-                    )}
-                    <div className="text-[10px] text-slate-500 mt-1">
-                      Reg ID: #{p.id}
+                    <div className="text-xs text-slate-400 mt-0.5 flex items-center justify-between">
+                      <span>{team ? `Squad: ${team}` : "Solo Entry"}</span>
+                      <span className="font-mono text-[11px] text-slate-500">#{p.registration_number || p.id}</span>
                     </div>
                   </button>
                 );
@@ -233,101 +262,122 @@ export default function JudgeScoringPage() {
             </div>
           </div>
 
-          {/* Scoring Rubrics Column */}
-          <div className="lg:col-span-2 p-6 sm:p-8 rounded-3xl bg-slate-900 border border-slate-800 space-y-6 flex flex-col justify-between">
+          {/* Rubric Evaluation Form Column */}
+          <div className="lg:col-span-2 p-6 sm:p-8 rounded-3xl bg-slate-900 border border-slate-800 space-y-6 flex flex-col justify-between shadow-xl">
             <div className="space-y-6">
-              {/* Evaluated Competitor Header */}
+              {/* Active competitor header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
                 <div>
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest block">
-                    Now Evaluating
+                  <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">
+                    Evaluating Competitor
                   </span>
-                  <h2 className="text-xl font-black text-white">
-                    {activeParticipant?.user?.full_name || "Competitor"}
-                    {activeParticipant?.team ? ` (${activeParticipant.team.name})` : ""}
+                  <h2 className="text-xl font-extrabold text-white">
+                    {activeParticipant?.participant_name || activeParticipant?.user?.full_name || "Selected Participant"}
                   </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {activeParticipant?.team_name ? `Team: ${activeParticipant.team_name}` : "Solo Entry"} • Registration #{activeParticipant?.registration_number || activeParticipant?.id}
+                  </p>
                 </div>
 
-                <div className="text-right">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest block">
-                    Calculated Weighted Score
+                <div className="text-right bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 block">
+                    Tabulated Total
                   </span>
-                  <div className="text-3xl font-black font-mono text-amber-400">
-                    {calculateTotal()} <span className="text-xs text-slate-500 font-normal">pts</span>
+                  <div className="text-2xl font-black text-amber-400 font-mono">
+                    {calculateTotal()} <span className="text-xs text-slate-400 font-normal">pts</span>
                   </div>
                 </div>
               </div>
 
-              {/* Rubric Sliders */}
-              <div className="space-y-5">
-                {criteria.length === 0 ? (
-                  <p className="text-xs text-slate-500 italic">
-                    No rubric criteria configured by coordinator for this event yet.
+              {/* Rubric Sliders / Inputs */}
+              {criteria.length === 0 ? (
+                <div className="p-8 text-center bg-slate-950 rounded-2xl border border-slate-800">
+                  <AlertCircle className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                  <p className="text-xs text-slate-400">
+                    No evaluation criteria have been established for this event yet by the coordinator.
                   </p>
-                ) : (
-                  criteria.map((c) => {
-                    const currentVal = scores[c.id] ?? 0;
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {criteria.map((c) => {
+                    const maxScore = c.max_score || c.max_points || 10;
+                    const val = scores[c.id] || 0;
                     return (
                       <div
                         key={c.id}
-                        className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2"
+                        className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3"
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <span className="font-bold text-white text-sm block">{c.name}</span>
+                            <div className="font-bold text-white text-sm">{c.name}</div>
                             {c.description && (
-                              <p className="text-[11px] text-slate-400">{c.description}</p>
+                              <div className="text-xs text-slate-400 mt-0.5">{c.description}</div>
                             )}
                           </div>
-                          <span className="font-mono font-bold text-base text-amber-400">
-                            {currentVal} / {c.max_points}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              ({c.weightage}x weight)
+                            </span>
+                            <span className="font-mono font-bold text-base text-amber-400">
+                              {val} / {maxScore}
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-3 pt-1">
+                        <div className="flex items-center gap-4">
                           <input
                             type="range"
-                            min={0}
-                            max={c.max_points}
-                            step={1}
-                            value={currentVal}
+                            min="0"
+                            max={maxScore}
+                            step="1"
+                            value={val}
                             onChange={(e) => handleScoreChange(c.id, e.target.value)}
-                            className="flex-1 accent-amber-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                            className="flex-1 accent-amber-500 h-2 bg-slate-800 rounded-lg cursor-pointer"
                           />
-                        </div>
-                        <div className="text-[10px] text-slate-500 text-right">
-                          Weight factor: {c.weightage}x
+                          <input
+                            type="number"
+                            min="0"
+                            max={maxScore}
+                            value={val}
+                            onChange={(e) => handleScoreChange(c.id, e.target.value)}
+                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs font-mono text-center text-white focus:outline-none focus:border-amber-500"
+                          />
                         </div>
                       </div>
                     );
-                  })
-                )}
-              </div>
+                  })}
+                </div>
+              )}
 
-              {/* Qualitative Remarks */}
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
-                  Qualitative Feedback & Remarks (Optional)
+              {/* Remarks Box */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                  Judicial Evaluation Remarks & Feedback
                 </label>
                 <textarea
-                  rows={3}
-                  placeholder="Key strengths, architectural highlights, suggestions for improvement..."
+                  rows="3"
+                  placeholder="Constructive feedback, technical critique, or performance notes..."
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                 />
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-800 flex justify-end">
+            {/* Submit Action Button */}
+            <div className="pt-4 border-t border-slate-800 flex items-center justify-end">
               <button
                 type="submit"
-                disabled={submitting || criteria.length === 0}
-                className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
+                disabled={submitting || criteria.length === 0 || !isEventCommenced()}
+                className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
               >
-                <Gavel className="w-4 h-4" />
-                {submitting ? "Recording Score..." : "Submit Official Evaluation"}
+                <CheckCircle2 className="w-4 h-4" />
+                {!isEventCommenced()
+                  ? "Scoring Opens on Event Day"
+                  : submitting
+                  ? "Tabulating Score..."
+                  : "Submit Official Scorecard"}
               </button>
             </div>
           </div>

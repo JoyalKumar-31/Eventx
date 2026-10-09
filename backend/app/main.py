@@ -21,7 +21,8 @@ from app.api.v1 import (
     sponsors,
     announcements,
     admin,
-    public
+    public,
+    agents
 )
 
 app = FastAPI(
@@ -47,6 +48,7 @@ app = FastAPI(
         {"name": "Announcements", "description": "Fest announcements and targeted broadcasts"},
         {"name": "Admin", "description": "System analytics, audit trails, and revenue metrics"},
         {"name": "Public", "description": "Unauthenticated public schedules, stats, and venues"},
+        {"name": "Fest AI Agents", "description": "LangGraph multi-agent copilot for fest attendees, coordinators, and judges"},
     ]
 )
 
@@ -101,6 +103,7 @@ app.include_router(sponsors.router, prefix="/api")
 app.include_router(announcements.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(public.router, prefix="/api")
+app.include_router(agents.router, prefix="/api")
 
 
 @app.get("/api/health", tags=["Health"])

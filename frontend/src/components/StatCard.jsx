@@ -6,7 +6,7 @@ export const StatCard = ({ title, value, subtitle, icon: Icon, trend, color = "i
     emerald: "from-emerald-500/20 to-emerald-600/5 text-emerald-400 border-emerald-500/20",
     amber: "from-amber-500/20 to-amber-600/5 text-amber-400 border-amber-500/20",
     purple: "from-purple-500/20 to-purple-600/5 text-purple-400 border-purple-500/20",
-    sky: "from-sky-500/20 to-sky-600/5 text-sky-400 border-sky-500/20",
+    sky: "from-amber-500/20 to-amber-600/5 text-amber-300 border-amber-500/20",
     rose: "from-rose-500/20 to-rose-600/5 text-rose-400 border-rose-500/20",
   };
 

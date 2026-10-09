@@ -113,17 +113,21 @@ export default function SponsorPlansPage() {
                     <p className="text-xs text-slate-400 mt-1">{p.description}</p>
                   </div>
 
-                  {p.benefits && p.benefits.length > 0 && (
+                  {((p.benefits && p.benefits.length > 0) || p.benefits_description) && (
                     <div className="space-y-2 pt-2 border-t border-slate-800/80">
                       <span className="text-[10px] uppercase font-bold text-slate-500 block">
                         Included Deliverables
                       </span>
-                      {p.benefits.map((b, idx) => (
-                        <div key={idx} className="flex items-start gap-2 text-xs text-slate-300">
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                          <span>{b}</span>
-                        </div>
-                      ))}
+                      {p.benefits && p.benefits.length > 0 ? (
+                        p.benefits.map((b, idx) => (
+                          <div key={idx} className="flex items-start gap-2 text-xs text-slate-300">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                            <span>{b}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-slate-300">{p.benefits_description}</p>
+                      )}
                     </div>
                   )}
                 </div>

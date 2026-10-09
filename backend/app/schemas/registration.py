@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 from app.models.enums import RegistrationStatus, TeamStatus, TeamMemberRole
@@ -28,11 +28,17 @@ class TeamResponse(BaseModel):
     id: int
     name: str
     event_id: int
+    event_title: Optional[str] = None
     leader_id: int
     invite_code: str
     status: TeamStatus
     created_at: datetime
     members: List[TeamMemberResponse] = []
+    is_registered: bool = False
+    registration_id: Optional[int] = None
+    min_team_size: Optional[int] = None
+    max_team_size: Optional[int] = None
+    registration_fee: Optional[float] = 0.0
 
 
 class RegistrationCreate(BaseModel):
@@ -54,9 +60,14 @@ class RegistrationResponse(BaseModel):
     team_name: Optional[str] = None
     status: RegistrationStatus
     registered_at: datetime
+    created_at: Optional[datetime] = None
     qr_code_hash: str
     payment_status: Optional[str] = None
     entry_status: Optional[str] = None
+    registration_fee: Optional[float] = 0.0
+    user: Optional[Dict[str, Any]] = None
+    event: Optional[Dict[str, Any]] = None
+    team: Optional[Dict[str, Any]] = None
 
 
 class QREntryPassResponse(BaseModel):

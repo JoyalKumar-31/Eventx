@@ -120,7 +120,7 @@ export default function JudgeDashboard() {
         ) : (
           <div className="divide-y divide-slate-800">
             {assignedEvents.map((item) => {
-              const evt = item.event;
+              const evt = item.event || item;
               return (
                 <div
                   key={item.id}
@@ -132,8 +132,8 @@ export default function JudgeDashboard() {
                     </h4>
                     <div className="text-xs text-slate-400 flex items-center gap-3 mt-1">
                       <span>Category: <strong className="text-slate-200">{evt?.category?.name || "General"}</strong></span>
-                      <span>Format: <strong className="text-slate-200">{evt?.event_format}</strong></span>
-                      <span>Enrolled: <strong className="text-amber-400">{evt?.registrations?.length || 0}</strong></span>
+                      <span>Format: <strong className="text-slate-200">{evt?.is_team_event ? "Team" : "Solo"}</strong></span>
+                      <span>Enrolled: <strong className="text-amber-400">{evt?.current_participants ?? evt?.registrations?.length ?? 0}</strong></span>
                     </div>
                   </div>
 

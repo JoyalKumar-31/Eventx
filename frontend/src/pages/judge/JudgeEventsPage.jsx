@@ -51,7 +51,7 @@ export default function JudgeEventsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {assigned.map((item) => {
-            const evt = item.event;
+            const evt = item.event || item;
             return (
               <div
                 key={item.id}
@@ -70,7 +70,7 @@ export default function JudgeEventsPage() {
                       {evt?.title}
                     </h3>
                     <p className="text-xs text-slate-400 mt-1 line-clamp-2">
-                      {evt?.short_description}
+                      {evt?.description || evt?.short_description}
                     </p>
                   </div>
 
@@ -78,8 +78,8 @@ export default function JudgeEventsPage() {
                     <div className="flex items-center gap-2">
                       <Calendar className="w-3.5 h-3.5 text-amber-400" />
                       <span>
-                        {evt?.start_date
-                          ? new Date(evt.start_date).toLocaleDateString(undefined, {
+                        {evt?.start_time || evt?.start_date
+                          ? new Date(evt.start_time || evt.start_date).toLocaleDateString(undefined, {
                               weekday: "short",
                               month: "short",
                               day: "numeric",
@@ -95,7 +95,7 @@ export default function JudgeEventsPage() {
                     )}
                     <div className="flex items-center gap-2">
                       <Users className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>{evt?.registrations?.length || 0} Registered Competitors</span>
+                      <span>{evt?.current_participants ?? evt?.registrations?.length ?? 0} Registered Competitors</span>
                     </div>
                   </div>
                 </div>

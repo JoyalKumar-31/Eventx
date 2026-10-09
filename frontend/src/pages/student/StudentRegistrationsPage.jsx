@@ -43,10 +43,16 @@ export default function StudentRegistrationsPage() {
   };
 
   const filtered = registrations.filter((r) => {
+    const eventTitle = r.event_title || r.event?.title || "";
+    const teamName = r.team_name || r.team?.name || "";
     const matchesSearch =
-      r.event?.title?.toLowerCase().includes(search.toLowerCase()) ||
-      r.team?.name?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = filterStatus === "ALL" || r.status === filterStatus;
+      eventTitle.toLowerCase().includes(search.toLowerCase()) ||
+      teamName.toLowerCase().includes(search.toLowerCase());
+    const statusVal = r.status || "";
+    const matchesStatus =
+      filterStatus === "ALL" ||
+      statusVal === filterStatus ||
+      (filterStatus === "PENDING" && (statusVal === "PENDING" || statusVal === "PENDING_PAYMENT"));
     return matchesSearch && matchesStatus;
   });
 
@@ -118,7 +124,11 @@ export default function StudentRegistrationsPage() {
       ) : (
         <div className="space-y-4">
           {filtered.map((reg) => {
-            const isPaid = reg.payment_status === "PAID" || Number(reg.event?.registration_fee || 0) === 0;
+            const fee = Number(reg.registration_fee ?? reg.event?.registration_fee ?? 0);
+            const isPaid = reg.payment_status === "PAID" || fee === 0;
+            const eventTitle = reg.event_title || reg.event?.title || `Event #${reg.event_id}`;
+            const teamName = reg.team_name || reg.team?.name;
+
             return (
               <div
                 key={reg.id}
@@ -144,22 +154,22 @@ export default function StudentRegistrationsPage() {
 
                   <h3 className="text-lg font-bold text-white hover:text-indigo-400 transition-colors">
                     <Link to={`/events/${reg.event_id}`}>
-                      {reg.event?.title || `Event #${reg.event_id}`}
+                      {eventTitle}
                     </Link>
                   </h3>
 
                   <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400">
-                    {reg.event?.category && (
-                      <span>Category: <strong className="text-slate-200">{reg.event.category.name}</strong></span>
+                    {(reg.event?.category?.name || reg.category_name) && (
+                      <span>Category: <strong className="text-slate-200">{reg.event?.category?.name || reg.category_name}</strong></span>
                     )}
-                    <span>Format: <strong className="text-slate-200">{reg.event?.event_format || "SOLO"}</strong></span>
-                    {reg.team && (
+                    <span>Format: <strong className="text-slate-200">{teamName ? "TEAM" : (reg.event?.event_format || "SOLO")}</strong></span>
+                    {teamName && (
                       <span className="flex items-center gap-1 text-indigo-300">
-                        <Users className="w-3.5 h-3.5" /> Team: {reg.team.name}
+                        <Users className="w-3.5 h-3.5" /> Team: {teamName}
                       </span>
                     )}
-                    {reg.event?.registration_fee > 0 && (
-                      <span>Fee: <strong className="text-white">₹{reg.event.registration_fee}</strong></span>
+                    {fee > 0 && (
+                      <span>Fee: <strong className="text-white">₹{fee}</strong></span>
                     )}
                   </div>
                 </div>
@@ -171,7 +181,7 @@ export default function StudentRegistrationsPage() {
                       onClick={() => setPaymentReg(reg)}
                       className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-amber-500/20"
                     >
-                      <CreditCard className="w-4 h-4" /> Pay ₹{reg.event?.registration_fee}
+                      <CreditCard className="w-4 h-4" /> Pay ₹{fee}
                     </button>
                   )}
 

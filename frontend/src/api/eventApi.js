@@ -29,6 +29,14 @@ export const eventApi = {
     const res = await apiClient.post(`/events/${id}/unpublish`);
     return res.data;
   },
+  startEvent: async (id) => {
+    const res = await apiClient.post(`/events/${id}/start`);
+    return res.data;
+  },
+  completeEvent: async (id) => {
+    const res = await apiClient.post(`/events/${id}/complete`);
+    return res.data;
+  },
   deleteEvent: async (id) => {
     const res = await apiClient.delete(`/events/${id}`);
     return res.data;

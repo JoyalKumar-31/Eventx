@@ -23,6 +23,30 @@ def format_payment_response(p: Payment) -> PaymentResponse:
         inv = InvoiceResponse.model_validate(p.invoice)
     res = PaymentResponse.model_validate(p)
     res.invoice = inv
+    if inv:
+        res.invoices = [inv]
+
+    if p.registration:
+        evt_title = p.registration.event.title if p.registration.event else f"Event #{p.registration.event_id}"
+        u_name = p.registration.user.full_name if p.registration.user else "Student"
+        u_email = p.registration.user.email if p.registration.user else ""
+        res.event_title = evt_title
+        res.user_name = u_name
+        res.user_email = u_email
+        res.registration = {
+            "id": p.registration.id,
+            "registration_number": p.registration.registration_number,
+            "event_id": p.registration.event_id,
+            "event": {
+                "id": p.registration.event_id,
+                "title": evt_title
+            },
+            "user": {
+                "id": p.registration.user_id,
+                "full_name": u_name,
+                "email": u_email
+            }
+        }
     return res
 
 

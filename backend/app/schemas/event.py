@@ -99,6 +99,22 @@ class ScheduleCreate(BaseModel):
     status: str = "SCHEDULED"
 
 
+class ScheduleEventBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    title: str
+    category: Optional[EventCategoryResponse] = None
+    status: Optional[str] = None
+    is_team_event: Optional[bool] = False
+
+
+class ScheduleRoundBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    round_number: Optional[int] = 1
+
+
 class ScheduleResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -111,6 +127,8 @@ class ScheduleResponse(BaseModel):
     end_time: datetime
     status: str
     venue: Optional[VenueResponse] = None
+    event: Optional[ScheduleEventBrief] = None
+    round: Optional[ScheduleRoundBrief] = None
 
 
 class EventMediaResponse(BaseModel):

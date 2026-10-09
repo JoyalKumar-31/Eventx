@@ -448,6 +448,64 @@ def unpublish_event(
     return format_event_detail_response(event)
 
 
+@router.post("/{event_id}/start", response_model=EventDetailResponse)
+def start_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
+):
+    """Transition event to ONGOING status so competitions and live scoring can commence."""
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if current_user.role != UserRole.ADMIN and event.coordinator_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized to start this competition")
+
+    event.status = EventStatus.ONGOING
+    db.commit()
+    db.refresh(event)
+
+    log_action(
+        db,
+        action="EVENT_STARTED",
+        entity_type="Event",
+        entity_id=str(event.id),
+        user_id=current_user.id
+    )
+
+    return format_event_detail_response(event)
+
+
+@router.post("/{event_id}/complete", response_model=EventDetailResponse)
+def complete_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
+):
+    """Mark event as COMPLETED once all rounds and final scoring conclude."""
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if current_user.role != UserRole.ADMIN and event.coordinator_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized to close this competition")
+
+    event.status = EventStatus.COMPLETED
+    db.commit()
+    db.refresh(event)
+
+    log_action(
+        db,
+        action="EVENT_COMPLETED",
+        entity_type="Event",
+        entity_id=str(event.id),
+        user_id=current_user.id
+    )
+
+    return format_event_detail_response(event)
+
+
 @router.delete("/{event_id}", status_code=status.HTTP_200_OK)
 def delete_event(
     event_id: int,

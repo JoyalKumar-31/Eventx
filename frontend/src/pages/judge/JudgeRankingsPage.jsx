@@ -29,7 +29,7 @@ export default function JudgeRankingsPage() {
       const data = await judgeApi.getMyAssignedEvents();
       setAssignedEvents(data || []);
       if (!selectedEventId && data && data.length > 0) {
-        setSelectedEventId(String(data[0].event_id));
+        setSelectedEventId(String(data[0].id || data[0].event_id));
       }
     } catch (err) {
       console.error("Failed to load assigned events", err);
@@ -70,11 +70,15 @@ export default function JudgeRankingsPage() {
             }}
             className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
           >
-            {assignedEvents.map((a) => (
-              <option key={a.id} value={a.event_id}>
-                {a.event?.title || `Event #${a.event_id}`}
-              </option>
-            ))}
+            {assignedEvents.map((a) => {
+              const eventId = a.id || a.event_id;
+              const title = a.title || a.event?.title || `Event #${eventId}`;
+              return (
+                <option key={a.id} value={eventId}>
+                  {title}
+                </option>
+              );
+            })}
           </select>
         </div>
       </div>

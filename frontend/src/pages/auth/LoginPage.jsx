@@ -20,28 +20,32 @@ export const LoginPage = () => {
 
     try {
       const user = await login(email, password);
-      // Automatic role-based redirection strictly determined by database record
-      const from = location.state?.from?.pathname;
-      if (from && !from.startsWith("/login") && !from.startsWith("/register")) {
-        navigate(from, { replace: true });
-      } else {
-        const dest = getRoleDashboardPath(user.role);
-        navigate(dest, { replace: true });
-      }
+      // Automatically route strictly to user's portal based on their database role
+      const dest = getRoleDashboardPath(user?.role);
+      navigate(dest, { replace: true });
     } catch (err) {
-      setError(
-        err.response?.data?.message || "Invalid credentials. Please verify your email and password."
-      );
+      const d = err.response?.data;
+      let msg = "Invalid credentials. Please verify your email and password.";
+      if (typeof d?.detail === "string") {
+        msg = d.detail;
+      } else if (d?.detail?.message) {
+        msg = d.detail.message;
+      } else if (d?.message) {
+        msg = d.message;
+      } else if (err.message) {
+        msg = err.message;
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 selection:bg-amber-500/30 selection:text-amber-200">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <Link to="/" className="inline-flex items-center gap-2.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-xl shadow-indigo-600/30">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-400 to-yellow-300 flex items-center justify-center text-slate-950 shadow-xl shadow-amber-500/30">
             <Sparkles className="w-6 h-6" />
           </div>
         </Link>
@@ -58,7 +62,7 @@ export const LoginPage = () => {
           {error && (
             <div className="mb-6 flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
-              <span>{error}</span>
+              <span>{typeof error === "string" ? error : JSON.stringify(error)}</span>
             </div>
           )}
 
@@ -94,7 +98,7 @@ export const LoginPage = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-xs bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-xs bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
                 />
               </div>
             </div>
@@ -102,11 +106,11 @@ export const LoginPage = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white transition-all shadow-md shadow-indigo-600/20 cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 transition-all shadow-md shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
                   <span>Verifying Credentials...</span>
                 </>
               ) : (
@@ -121,7 +125,7 @@ export const LoginPage = () => {
           <div className="mt-6 pt-5 border-t border-slate-800 text-center">
             <p className="text-xs text-slate-400">
               Don't have an account yet?{" "}
-              <Link to="/register" className="font-semibold text-indigo-400 hover:text-indigo-300">
+              <Link to="/register" className="font-semibold text-amber-400 hover:text-amber-300">
                 Register here
               </Link>
             </p>

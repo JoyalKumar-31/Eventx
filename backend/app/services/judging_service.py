@@ -8,7 +8,7 @@ from app.models.judging import JudgeAssignment, ScoreCriteria, Score, Result
 from app.models.event import Event
 from app.models.registration import Registration
 from app.models.user import User
-from app.models.enums import JudgeAssignmentStatus, UserRole
+from app.models.enums import JudgeAssignmentStatus, UserRole, EventStatus
 from app.schemas.judging import ScoreSubmissionRequest
 from app.services.audit_service import log_action
 from app.services.notification_service import create_notification
@@ -65,16 +65,53 @@ def submit_scores(
     event_id: int,
     submission: ScoreSubmissionRequest
 ) -> List[Score]:
-    # Verify judge is assigned to this event
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    user = db.query(User).filter(User.id == judge_user_id).first()
+
+    # Verify event status & event day commencement
+    if event.status in [EventStatus.DRAFT, EventStatus.CANCELLED]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot submit scores for an event with status '{event.status.value}'."
+        )
+
+    # Scoring is only allowed on event day or when the event is marked ongoing/completed
+    now_utc = datetime.now(timezone.utc)
+    event_start = event.start_time if (event.start_time and event.start_time.tzinfo) else (
+        event.start_time.replace(tzinfo=timezone.utc) if event.start_time else now_utc
+    )
+    is_event_day_or_past = (now_utc.date() >= event_start.date()) or (now_utc >= event_start)
+
+    if event.status not in [EventStatus.ONGOING, EventStatus.COMPLETED] and not is_event_day_or_past:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Judging and scorecard entry opens on the event day once the competition has commenced."
+        )
+
+    # Verify judge is assigned to this event OR is the event coordinator/admin
     assignment = db.query(JudgeAssignment).filter(
         JudgeAssignment.event_id == event_id,
         JudgeAssignment.judge_id == judge_user_id
     ).first()
+
     if not assignment:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not assigned as a judge for this event"
-        )
+        # If user is the event coordinator or admin, create/link an assignment for their evaluation
+        if (user and user.role == UserRole.ADMIN) or (event.coordinator_id == judge_user_id):
+            assignment = JudgeAssignment(
+                event_id=event_id,
+                judge_id=judge_user_id,
+                status=JudgeAssignmentStatus.ASSIGNED
+            )
+            db.add(assignment)
+            db.flush()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not assigned as an authorized judge for this event."
+            )
 
     # Verify registration belongs to event
     registration = db.query(Registration).filter(

@@ -119,19 +119,41 @@ def create_promotion_slot(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.SPONSOR, UserRole.ADMIN))
 ):
-    sponsorship = db.query(Sponsorship).filter(Sponsorship.id == req.sponsorship_id).first()
-    if not sponsorship:
-        raise HTTPException(status_code=404, detail="Sponsorship record not found")
+    sponsorship = None
+    if req.sponsorship_id:
+        sponsorship = db.query(Sponsorship).filter(Sponsorship.id == req.sponsorship_id).first()
+        if not sponsorship:
+            raise HTTPException(status_code=404, detail="Sponsorship record not found")
+        if current_user.role != UserRole.ADMIN and sponsorship.sponsor_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Unauthorized to add promotions to this sponsorship")
+    else:
+        sponsorship = db.query(Sponsorship).filter(Sponsorship.sponsor_id == current_user.id).order_by(Sponsorship.id.desc()).first()
+        if not sponsorship:
+            first_plan = db.query(SponsorshipPlan).filter(SponsorshipPlan.is_active == True).first()
+            if first_plan:
+                sponsorship = Sponsorship(
+                    sponsor_id=current_user.id,
+                    plan_id=first_plan.id,
+                    status=SponsorshipStatus.ACTIVE,
+                    contract_amount=first_plan.price,
+                    start_date=datetime.now(timezone.utc)
+                )
+                db.add(sponsorship)
+                first_plan.slots_booked += 1
+                db.commit()
+                db.refresh(sponsorship)
+            else:
+                raise HTTPException(status_code=400, detail="Please select a sponsorship plan first.")
 
-    if current_user.role != UserRole.ADMIN and sponsorship.sponsor_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Unauthorized to add promotions to this sponsorship")
+    title_val = req.title or req.slot_name or "Promotional Banner"
+    asset_val = req.asset_url or req.banner_image_url
 
     slot = PromotionSlot(
         sponsorship_id=sponsorship.id,
         slot_type=req.slot_type,
-        title=req.title.strip(),
-        asset_url=req.asset_url,
-        target_url=req.target_url,
+        title=title_val.strip(),
+        asset_url=asset_val.strip() if asset_val else None,
+        target_url=req.target_url.strip() if req.target_url else None,
         impressions_count=0,
         clicks_count=0,
         is_active=True

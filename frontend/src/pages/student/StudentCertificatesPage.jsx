@@ -74,31 +74,36 @@ export default function StudentCertificatesPage() {
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {certificates.map((cert) => (
-            <div
-              key={cert.id}
-              className="p-6 rounded-3xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between shadow-xl"
-            >
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wider ${getBadgeStyle(
-                      cert.certificate_type
-                    )}`}
-                  >
-                    {cert.certificate_type}
-                  </span>
-                  <Award className="w-5 h-5 text-amber-400" />
-                </div>
+          {certificates.map((cert) => {
+            const certType = cert.award_title || cert.certificate_type || "PARTICIPATION";
+            const eventTitle = cert.event_title || cert.event?.title || (cert.event_id ? `Event #${cert.event_id}` : "College Fest");
+            const issueDate = cert.issued_at || cert.issue_date || new Date().toISOString();
 
-                <div>
-                  <h3 className="text-xl font-bold text-white">
-                    {cert.event?.title || `Event #${cert.event_id}`}
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Issued: {new Date(cert.issued_at).toLocaleDateString()}
-                  </p>
-                </div>
+            return (
+              <div
+                key={cert.id}
+                className="p-6 rounded-3xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between shadow-xl"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wider ${getBadgeStyle(
+                        certType
+                      )}`}
+                    >
+                      {certType}
+                    </span>
+                    <Award className="w-5 h-5 text-amber-400" />
+                  </div>
+
+                  <div>
+                    <h3 className="text-xl font-bold text-white">
+                      {eventTitle}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Issued: {new Date(issueDate).toLocaleDateString()}
+                    </p>
+                  </div>
 
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-400 space-y-1">
                   <span className="text-slate-500 uppercase text-[10px] block font-bold">
@@ -134,7 +139,8 @@ export default function StudentCertificatesPage() {
                 </Link>
               </div>
             </div>
-          ))}
+          );
+        })}
         </div>
       )}
     </div>

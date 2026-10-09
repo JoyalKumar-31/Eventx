@@ -17,4 +17,8 @@ export const teamApi = {
     const res = await apiClient.get(`/teams/${id}`);
     return res.data;
   },
+  getEventTeams: async (eventId) => {
+    const res = await apiClient.get(`/teams/event/${eventId}`);
+    return res.data;
+  },
 };

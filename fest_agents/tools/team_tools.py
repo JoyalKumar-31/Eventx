@@ -67,10 +67,8 @@ def check_registration_status(reg_id: str) -> Dict[str, Any]:
 
     # Try live MySQL database first
     try:
-        from app.core.database import SessionLocal
+        from app.db.session import SessionLocal
         from app.models.registration import Registration
-        from app.models.pass_attendance import FestPass, Attendance
-        from app.models.team import Team
         from app.models.user import User
 
         db = SessionLocal()
@@ -79,27 +77,32 @@ def check_registration_status(reg_id: str) -> Dict[str, Any]:
             num_part = ''.join(c for c in reg_key if c.isdigit())
             db_reg = None
             if num_part:
-                db_reg = db.query(Registration).filter(Registration.id == int(num_part)).first()
+                db_reg = db.query(Registration).filter(
+                    (Registration.registration_number.ilike(f"%{reg_key}%")) |
+                    (Registration.id == int(num_part))
+                ).first()
 
-            # If not found by ID, search by team name or user email/name
+            # If not found by ID, search by registration number, team name, or user email/name
             if not db_reg:
                 db_reg = db.query(Registration).join(Registration.user).filter(
-                    (User.email.ilike(f"%{reg_id}%")) | (User.full_name.ilike(f"%{reg_id}%"))
+                    (Registration.registration_number.ilike(f"%{reg_id}%")) |
+                    (User.email.ilike(f"%{reg_id}%")) |
+                    (User.full_name.ilike(f"%{reg_id}%"))
                 ).first()
 
             if db_reg:
-                team_name = db_reg.team.name if db_reg.team else (db_reg.user.full_name if db_reg.user else "Individual")
+                team_name = db_reg.team.name if db_reg.team else (db_reg.user.full_name if db_reg.user else "Individual Competitor")
                 leader_name = db_reg.team.leader.full_name if (db_reg.team and db_reg.team.leader) else (db_reg.user.full_name if db_reg.user else "Participant")
                 members_count = len(db_reg.team.members) if db_reg.team else 1
-                payment_status = db_reg.payment.status.value if db_reg.payment else db_reg.status.value
-                qr_pass_code = db_reg.fest_pass.qr_token if db_reg.fest_pass else "NOT_ISSUED"
-                is_checked_in = (db_reg.attendance is not None and db_reg.attendance.status.value == "CHECKED_IN")
+                payment_status = db_reg.status.value
+                qr_pass_code = db_reg.qr_code_hash or f"PASS-{db_reg.id}"
+                is_checked_in = bool(db_reg.attendance_records and len(db_reg.attendance_records) > 0)
 
                 return {
                     "found": True,
-                    "registration_id": f"REG-{db_reg.id}",
+                    "registration_id": db_reg.registration_number or f"REG-{db_reg.id}",
                     "team_name": team_name,
-                    "event": db_reg.event.name if db_reg.event else "N/A",
+                    "event": db_reg.event.title if db_reg.event else "N/A",
                     "leader": leader_name,
                     "members_count": members_count,
                     "payment_status": payment_status,
@@ -139,43 +142,43 @@ def verify_qr_entry_pass(pass_code: str) -> Dict[str, Any]:
 
     # Try live MySQL database first
     try:
-        from app.core.database import SessionLocal
-        from app.models.pass_attendance import FestPass, PassStatus, AttendanceStatus
-        from app.models.registration import Registration, RegistrationStatus
+        from app.db.session import SessionLocal
+        from app.models.registration import Registration
+        from app.models.enums import RegistrationStatus
 
         db = SessionLocal()
         try:
-            # Query by qr_token or pass id
+            # Query by qr_code_hash or registration_number or numeric id
             num_part = ''.join(c for c in code if c.isdigit())
-            db_pass = db.query(FestPass).filter(
-                (FestPass.qr_token.ilike(code)) |
-                (FestPass.qr_token.ilike(f"%{code}%")) |
-                (FestPass.id == int(num_part) if num_part else False)
+            db_reg = db.query(Registration).filter(
+                (Registration.qr_code_hash.ilike(code)) |
+                (Registration.qr_code_hash.ilike(f"%{code}%")) |
+                (Registration.registration_number.ilike(code)) |
+                (Registration.id == int(num_part) if num_part else False)
             ).first()
 
-            if db_pass:
-                reg = db_pass.registration
-                team_or_user = reg.team.name if (reg and reg.team) else (reg.user.full_name if (reg and reg.user) else "Participant")
-                event_name = reg.event.name if (reg and reg.event) else "Fest Event"
+            if db_reg:
+                team_or_user = db_reg.team.name if db_reg.team else (db_reg.user.full_name if db_reg.user else "Participant")
+                event_name = db_reg.event.title if db_reg.event else "Fest Event"
 
-                if db_pass.status == PassStatus.REVOKED:
+                if db_reg.status == RegistrationStatus.CANCELLED:
                     return {
                         "granted": False,
-                        "reason": "Entry Denied: This Fest Pass has been revoked by administration."
+                        "reason": "Entry Denied: This registration has been cancelled or revoked."
                     }
 
-                if reg and reg.status != RegistrationStatus.CONFIRMED:
+                if db_reg.status == RegistrationStatus.PENDING_PAYMENT:
                     return {
                         "granted": False,
-                        "reason": f"Payment pending ({reg.status.value})! Please clear dues at the registration desk."
+                        "reason": "Payment pending! Please complete fee payment at the registration counter."
                     }
 
                 return {
                     "granted": True,
                     "team_name": team_or_user,
                     "event": event_name,
-                    "pass_id": db_pass.id,
-                    "message": f"Entry Approved for {team_or_user}! Pass {db_pass.qr_token} verified."
+                    "pass_id": db_reg.id,
+                    "message": f"Entry Approved for {team_or_user}! Pass {db_reg.registration_number} verified."
                 }
         finally:
             db.close()

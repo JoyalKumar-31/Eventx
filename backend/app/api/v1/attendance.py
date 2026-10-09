@@ -15,16 +15,28 @@ router = APIRouter(prefix="/attendance", tags=["Attendance"])
 
 
 def format_att_response(att: Attendance) -> AttendanceResponse:
+    part_name = att.registration.user.full_name if (att.registration and att.registration.user) else "Participant"
+    part_email = att.registration.user.email if (att.registration and att.registration.user) else ""
+    reg_obj = {
+        "id": att.registration_id,
+        "registration_number": att.registration.registration_number if att.registration else None,
+        "user": {
+            "id": att.registration.user.id if (att.registration and att.registration.user) else None,
+            "full_name": part_name,
+            "email": part_email
+        } if (att.registration and att.registration.user) else None
+    }
     return AttendanceResponse(
         id=att.id,
         registration_id=att.registration_id,
         event_id=att.event_id,
-        participant_name=att.registration.user.full_name,
-        participant_email=att.registration.user.email,
-        event_title=att.event.title,
+        participant_name=part_name,
+        participant_email=part_email,
+        event_title=att.event.title if att.event else f"Event #{att.event_id}",
         entry_status=att.entry_status,
         scanned_at=att.scanned_at,
-        remarks=att.remarks
+        remarks=att.remarks,
+        registration=reg_obj
     )
 
 
@@ -38,9 +50,10 @@ def scan_qr_entry_pass(
     Validates QR entry ticket for participant.
     Prevents duplicate entries, checks event match, and marks attendance.
     """
+    payload = req.qr_payload or req.qr_hash
     attendance = verify_and_record_attendance(
         db=db,
-        qr_payload=req.qr_payload,
+        qr_payload=payload,
         scanned_by_user_id=current_user.id,
         expected_event_id=req.event_id,
         round_id=req.round_id,
@@ -58,9 +71,6 @@ def get_event_attendance(
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-
-    if current_user.role == UserRole.EVENT_COORDINATOR and event.coordinator_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Unauthorized: Not coordinator for this event")
 
     records = db.query(Attendance).filter(Attendance.event_id == event_id).order_by(Attendance.scanned_at.desc()).all()
     return [format_att_response(r) for r in records]

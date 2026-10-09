@@ -1,24 +1,66 @@
 @import "tailwindcss";
 
+@theme {
+  /* Deep Luxury Charcoal / Obsidian backgrounds (replacing cold navy/dark-blue slate) */
+  --color-slate-950: #0a0a0c;
+  --color-slate-900: #131317;
+  --color-slate-850: #1a1a20;
+  --color-slate-800: #23232a;
+  --color-slate-750: #2c2c35;
+  --color-slate-700: #383844;
+  --color-slate-600: #555564;
+  --color-slate-500: #787889;
+  --color-slate-400: #a2a2b3;
+  --color-slate-300: #cbcbd6;
+  --color-slate-200: #e6e6ee;
+  --color-slate-100: #f4f4f7;
+
+  /* Royal Champagne Gold & Warm Amber (replacing indigo/blue) */
+  --color-indigo-950: #261603;
+  --color-indigo-900: #492806;
+  --color-indigo-800: #733f0a;
+  --color-indigo-750: #96530e;
+  --color-indigo-700: #b45309;
+  --color-indigo-650: #c96708;
+  --color-indigo-600: #d97706;
+  --color-indigo-550: #e78c08;
+  --color-indigo-500: #f59e0b;
+  --color-indigo-400: #fbbf24;
+  --color-indigo-300: #fcd34d;
+  --color-indigo-200: #fde68a;
+  --color-indigo-100: #fef3c7;
+  --color-indigo-50: #fffbeb;
+
+  /* Blue alias to Champagne Gold */
+  --color-blue-950: #261603;
+  --color-blue-900: #492806;
+  --color-blue-800: #733f0a;
+  --color-blue-700: #b45309;
+  --color-blue-600: #d97706;
+  --color-blue-500: #f59e0b;
+  --color-blue-400: #fbbf24;
+  --color-blue-300: #fcd34d;
+}
+
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 antialiased font-sans min-h-screen;
+    @apply bg-slate-950 text-slate-100 antialiased font-sans min-h-screen selection:bg-amber-500/30 selection:text-amber-200;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
 
-/* Custom scrollbars */
+/* Custom Luxury Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #0a0a0c;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #2a2a32;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #3e3e4a;
 }

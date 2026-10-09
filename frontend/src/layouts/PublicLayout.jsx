@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { Sparkles, Calendar, MapPin, Award, Megaphone, ShieldCheck, Menu, X, ArrowRight, User as UserIcon, LogOut } from "lucide-react";
 import { useAuth, getRoleDashboardPath } from "../auth/AuthContext";
+import FestAICopilot from "../components/FestAICopilot";
 
 export const PublicLayout = () => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -30,12 +31,12 @@ export const PublicLayout = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Logo / Brand */}
           <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30 group-hover:scale-105 transition-transform">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-amber-400 to-yellow-300 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/30 group-hover:scale-105 transition-transform">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
               <span className="text-base font-extrabold tracking-tight text-white block leading-none">
-                CAMPUS<span className="text-indigo-400">FEST</span>
+                CAMPUS<span className="text-amber-400">FEST</span>
               </span>
               <span className="text-[10px] tracking-wider uppercase text-slate-400 font-semibold block mt-0.5">
                 University Fest Portal
@@ -51,7 +52,7 @@ export const PublicLayout = () => {
                 to={link.path}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                   isActive(link.path)
-                    ? "bg-slate-800 text-indigo-400 border border-slate-700/60 shadow-xs"
+                    ? "bg-slate-800 text-amber-400 border border-slate-700/60 shadow-xs"
                     : "text-slate-300 hover:text-white hover:bg-slate-900"
                 }`}
               >
@@ -66,7 +67,7 @@ export const PublicLayout = () => {
               <div className="flex items-center gap-3">
                 <Link
                   to={getRoleDashboardPath(user?.role)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/20"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all shadow-md shadow-amber-500/20"
                 >
                   <UserIcon className="w-3.5 h-3.5" />
                   <span>Dashboard ({user?.role})</span>
@@ -89,7 +90,7 @@ export const PublicLayout = () => {
                 </Link>
                 <Link
                   to="/register"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/20"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all shadow-md shadow-amber-500/20"
                 >
                   <span>Register</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -221,6 +222,9 @@ export const PublicLayout = () => {
           © 2026 College Fest Management Platform. Designed for Real Production Deployments.
         </div>
       </footer>
+
+      {/* Fest AI Multi-Agent Copilot */}
+      <FestAICopilot />
     </div>
   );
 };

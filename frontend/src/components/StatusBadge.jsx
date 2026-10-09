@@ -28,7 +28,7 @@ export const StatusBadge = ({ status }) => {
       case "ATTENDED":
         return "bg-indigo-500/15 text-indigo-400 border-indigo-500/30";
       case "COMPLETED":
-        return "bg-sky-500/15 text-sky-400 border-sky-500/30";
+        return "bg-amber-500/15 text-amber-300 border-amber-500/30";
       default:
         return "bg-slate-700/30 text-slate-300 border-slate-600/30";
     }

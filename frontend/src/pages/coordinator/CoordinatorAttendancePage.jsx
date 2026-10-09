@@ -77,6 +77,7 @@ export default function CoordinatorAttendancePage() {
       setManualSubmitting(true);
       setScanResult(null);
       const res = await attendanceApi.scanQR({
+        qr_payload: manualCode.trim(),
         qr_hash: manualCode.trim(),
         event_id: Number(selectedEventId),
       });
@@ -281,7 +282,7 @@ export default function CoordinatorAttendancePage() {
                 {attendances.map((att) => (
                   <tr key={att.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="px-6 py-4 font-bold text-white">
-                      {att.registration?.user?.full_name || "Participant"}
+                      {att.participant_name || att.registration?.user?.full_name || "Participant"}
                     </td>
                     <td className="px-6 py-4 font-mono text-slate-400">
                       #{att.registration_id}
@@ -313,6 +314,7 @@ export default function CoordinatorAttendancePage() {
       {showScannerModal && (
         <QRScannerModal
           isOpen={showScannerModal}
+          eventId={Number(selectedEventId)}
           onClose={() => setShowScannerModal(false)}
           onScanSuccess={() => {
             if (selectedEventId) {

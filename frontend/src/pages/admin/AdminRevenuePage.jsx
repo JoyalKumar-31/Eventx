@@ -37,24 +37,29 @@ export default function AdminRevenuePage() {
     }
   };
 
+  const isSuccessful = (p) => p.status === "SUCCESS" || p.status === "COMPLETED";
+
   const totalGross = payments
-    .filter((p) => p.status === "COMPLETED")
+    .filter(isSuccessful)
     .reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
   const totalTaxes = payments
-    .filter((p) => p.status === "COMPLETED")
+    .filter(isSuccessful)
     .reduce((sum, p) => {
-      const inv = p.invoices?.[0];
+      const inv = p.invoice || p.invoices?.[0];
       return sum + Number(inv?.tax_amount || 0);
     }, 0);
 
-  const filtered = payments.filter(
-    (p) =>
+  const filtered = payments.filter((p) => {
+    const user = p.user_name || p.registration?.user?.full_name || "";
+    const event = p.event_title || p.registration?.event?.title || "";
+    return (
       p.order_id?.toLowerCase().includes(search.toLowerCase()) ||
       p.transaction_id?.toLowerCase().includes(search.toLowerCase()) ||
-      p.registration?.user?.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-      p.registration?.event?.title?.toLowerCase().includes(search.toLowerCase())
-  );
+      user.toLowerCase().includes(search.toLowerCase()) ||
+      event.toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -139,47 +144,56 @@ export default function AdminRevenuePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {filtered.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="px-6 py-4 font-mono">
-                      <div className="text-white font-bold">{item.transaction_id || item.order_id}</div>
-                      <div className="text-[10px] text-slate-500">Method: {item.payment_method || "GATEWAY"}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-white font-bold">
-                        {item.registration?.user?.full_name || "Student"}
-                      </div>
-                      <div className="text-[10px] text-slate-500">{item.registration?.user?.email}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-white font-medium">
-                        {item.registration?.event?.title || `Event #${item.registration?.event_id}`}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 font-mono font-bold text-white text-sm">
-                      ₹{item.amount}
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={item.status} />
-                    </td>
-                    <td className="px-6 py-4 text-slate-400">
-                      {new Date(item.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {item.invoices && item.invoices.length > 0 ? (
-                        <button
-                          onClick={() => setSelectedInvoice(item.invoices[0])}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/20 font-medium transition-colors"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          View Receipt
-                        </button>
-                      ) : (
-                        <span className="text-slate-600 italic">No receipt</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((item) => {
+                  const invoiceObj = item.invoice || (item.invoices && item.invoices[0]);
+                  const participantName = item.user_name || item.registration?.user?.full_name || "Student";
+                  const participantEmail = item.user_email || item.registration?.user?.email || "";
+                  const eventTitle = item.event_title || item.registration?.event?.title || `Event #${item.registration?.event_id || item.registration_id}`;
+
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="px-6 py-4 font-mono">
+                        <div className="text-white font-bold">{item.transaction_id || item.order_id}</div>
+                        <div className="text-[10px] text-slate-500">Method: {item.payment_method || "GATEWAY"}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-white font-bold">
+                          {participantName}
+                        </div>
+                        {participantEmail && (
+                          <div className="text-[10px] text-slate-500">{participantEmail}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-white font-medium">
+                          {eventTitle}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 font-mono font-bold text-white text-sm">
+                        ₹{item.amount}
+                      </td>
+                      <td className="px-6 py-4">
+                        <StatusBadge status={item.status} />
+                      </td>
+                      <td className="px-6 py-4 text-slate-400">
+                        {new Date(item.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        {invoiceObj ? (
+                          <button
+                            onClick={() => setSelectedInvoice(invoiceObj)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/20 font-medium transition-colors"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            View Receipt
+                          </button>
+                        ) : (
+                          <span className="text-slate-600 italic">No receipt</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

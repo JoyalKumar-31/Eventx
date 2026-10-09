@@ -13,8 +13,16 @@ export const judgeApi = {
     const res = await apiClient.get(`/judges/event/${eventId}/assignments`);
     return res.data;
   },
+  unassignJudge: async (assignmentId) => {
+    const res = await apiClient.delete(`/judges/assignments/${assignmentId}`);
+    return res.data;
+  },
   createCriteria: async (data) => {
     const res = await apiClient.post("/judges/criteria", data);
+    return res.data;
+  },
+  deleteCriteria: async (criteriaId) => {
+    const res = await apiClient.delete(`/judges/criteria/${criteriaId}`);
     return res.data;
   },
   getEventCriteria: async (eventId) => {

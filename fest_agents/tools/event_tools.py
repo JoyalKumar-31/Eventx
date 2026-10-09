@@ -87,22 +87,28 @@ FEST_EVENTS_DB = {
 def get_all_events() -> List[Dict[str, Any]]:
     """Returns a list of all registered fest events with summary details."""
     try:
-        from app.core.database import SessionLocal
+        from app.db.session import SessionLocal
         from app.models.event import Event
+        from app.models.enums import EventStatus
         db = SessionLocal()
         try:
-            db_events = db.query(Event).filter(Event.is_active == True).all()
+            db_events = db.query(Event).filter(Event.status != EventStatus.DRAFT).all()
             if db_events:
                 summary = []
                 for ev in db_events:
+                    start_str = ev.start_time.strftime("%d %b, %I:%M %p") if ev.start_time else "TBA"
+                    end_str = ev.end_time.strftime("%d %b, %I:%M %p") if ev.end_time else "TBA"
+                    venue_str = ev.venue.name if ev.venue else "Campus Arena"
+                    if ev.venue and ev.venue.room_number:
+                        venue_str += f" ({ev.venue.room_number})"
                     summary.append({
                         "event_key": str(ev.id),
-                        "title": ev.name,
+                        "title": ev.title,
                         "category": ev.category.name if ev.category else "General",
-                        "venue": ev.venue.name if ev.venue else "Campus",
-                        "time": f"{ev.event_date} {ev.start_time.strftime('%I:%M %p')} - {ev.end_time.strftime('%I:%M %p')}",
-                        "team_size": f"{ev.min_team_size}-{ev.max_team_size} members",
-                        "fee": f"Rs. {float(ev.registration_fee):.0f}"
+                        "venue": venue_str,
+                        "time": f"{start_str} - {end_str}",
+                        "team_size": f"{ev.min_team_size}-{ev.max_team_size} members" if ev.is_team_event else "Individual (Solo)",
+                        "fee": f"Rs. {float(ev.registration_fee):.0f}" if ev.registration_fee > 0 else "Free Entry"
                     })
                 return summary
         finally:
@@ -131,30 +137,37 @@ def get_event_details(event_name: str) -> Optional[Dict[str, Any]]:
     """
     import re
     try:
-        from app.core.database import SessionLocal
+        from app.db.session import SessionLocal
         from app.models.event import Event
+        from app.models.enums import EventStatus
         db = SessionLocal()
         try:
             clean = event_name.lower().strip()
-            db_events = db.query(Event).filter(Event.is_active == True).all()
+            db_events = db.query(Event).filter(Event.status != EventStatus.DRAFT).all()
 
             # 1. Exact or substring match of event title
             for ev in db_events:
-                ev_name_lower = ev.name.lower()
-                if ev_name_lower == clean or ev_name_lower in clean:
-                    rules = [r.rule_text for r in ev.rules] if ev.rules else [
+                ev_name_lower = ev.title.lower()
+                if ev_name_lower == clean or ev_name_lower in clean or clean in ev_name_lower:
+                    rules = [r.description for r in ev.rules] if ev.rules else [
                         "All submissions must be original work.",
-                        "Participants must follow organizer guidelines."
+                        "Participants must adhere to the campus festival code of conduct."
                     ]
+                    start_str = ev.start_time.strftime("%d %b, %I:%M %p") if ev.start_time else "TBA"
+                    end_str = ev.end_time.strftime("%d %b, %I:%M %p") if ev.end_time else "TBA"
+                    venue_str = ev.venue.name if ev.venue else "Campus Arena"
+                    if ev.venue and ev.venue.room_number:
+                        venue_str += f" ({ev.venue.room_number})"
                     return {
                         "id": ev.id,
-                        "title": ev.name,
+                        "title": ev.title,
                         "category": ev.category.name if ev.category else "General",
-                        "venue": ev.venue.name if ev.venue else "Campus",
-                        "start_time": f"{ev.event_date}, {ev.start_time.strftime('%I:%M %p')}",
-                        "end_time": f"{ev.event_date}, {ev.end_time.strftime('%I:%M %p')}",
+                        "venue": venue_str,
+                        "start_time": start_str,
+                        "end_time": end_str,
                         "min_team_size": ev.min_team_size,
                         "max_team_size": ev.max_team_size,
+                        "is_team_event": ev.is_team_event,
                         "registration_fee": float(ev.registration_fee),
                         "rules": rules
                     }
@@ -168,26 +181,32 @@ def get_event_details(event_name: str) -> Optional[Dict[str, Any]]:
             best_match = None
             max_matches = 0
             for ev in db_events:
-                ev_tokens = set(re.findall(r'[a-zA-Z0-9]+', ev.name.lower()))
+                ev_tokens = set(re.findall(r'[a-zA-Z0-9]+', ev.title.lower()))
                 matches = sum(1 for w in words if w in ev_tokens or any(w in t for t in ev_tokens))
                 if matches > max_matches:
                     max_matches = matches
                     best_match = ev
 
             if best_match and max_matches > 0:
-                rules = [r.rule_text for r in best_match.rules] if best_match.rules else [
+                rules = [r.description for r in best_match.rules] if best_match.rules else [
                     "All submissions must be original work.",
-                    "Participants must follow organizer guidelines."
+                    "Participants must adhere to the campus festival code of conduct."
                 ]
+                start_str = best_match.start_time.strftime("%d %b, %I:%M %p") if best_match.start_time else "TBA"
+                end_str = best_match.end_time.strftime("%d %b, %I:%M %p") if best_match.end_time else "TBA"
+                venue_str = best_match.venue.name if best_match.venue else "Campus Arena"
+                if best_match.venue and best_match.venue.room_number:
+                    venue_str += f" ({best_match.venue.room_number})"
                 return {
                     "id": best_match.id,
-                    "title": best_match.name,
+                    "title": best_match.title,
                     "category": best_match.category.name if best_match.category else "General",
-                    "venue": best_match.venue.name if best_match.venue else "Campus",
-                    "start_time": f"{best_match.event_date}, {best_match.start_time.strftime('%I:%M %p')}",
-                    "end_time": f"{best_match.event_date}, {best_match.end_time.strftime('%I:%M %p')}",
+                    "venue": venue_str,
+                    "start_time": start_str,
+                    "end_time": end_str,
                     "min_team_size": best_match.min_team_size,
                     "max_team_size": best_match.max_team_size,
+                    "is_team_event": best_match.is_team_event,
                     "registration_fee": float(best_match.registration_fee),
                     "rules": rules
                 }

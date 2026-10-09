@@ -16,8 +16,31 @@ from app.schemas.judging import (
 from app.schemas.event import EventListResponse
 from app.api.v1.events import format_event_response
 from app.services.judging_service import assign_judge_to_event
+from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/judges", tags=["Judging"])
+
+
+def format_assignment_response(a: JudgeAssignment) -> JudgeAssignmentResponse:
+    judge_user_data = {
+        "id": a.judge.id,
+        "full_name": a.judge.full_name,
+        "email": a.judge.email,
+        "role": a.judge.role.value if hasattr(a.judge.role, "value") else str(a.judge.role),
+    } if a.judge else None
+
+    return JudgeAssignmentResponse(
+        id=a.id,
+        event_id=a.event_id,
+        event_title=a.event.title if a.event else f"Event #{a.event_id}",
+        judge_id=a.judge_id,
+        judge_name=a.judge.full_name if a.judge else f"Judge #{a.judge_id}",
+        round_id=a.round_id,
+        round_name=a.round.name if a.round else None,
+        status=a.status,
+        assigned_at=a.assigned_at,
+        judge_user=judge_user_data
+    )
 
 
 @router.post("/assign", response_model=JudgeAssignmentResponse, status_code=status.HTTP_201_CREATED)
@@ -26,36 +49,34 @@ def assign_judge(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
 ):
+    judge_target_id = req.judge_id or req.judge_user_id
+    if not judge_target_id:
+        raise HTTPException(status_code=400, detail="Missing judge_id or judge_user_id")
+
     assignment = assign_judge_to_event(
         db=db,
         event_id=req.event_id,
-        judge_id=req.judge_id,
+        judge_id=judge_target_id,
         round_id=req.round_id
     )
-    return JudgeAssignmentResponse(
-        id=assignment.id,
-        event_id=assignment.event_id,
-        event_title=assignment.event.title,
-        judge_id=assignment.judge_id,
-        judge_name=assignment.judge.full_name,
-        round_id=assignment.round_id,
-        round_name=assignment.round.name if assignment.round else None,
-        status=assignment.status,
-        assigned_at=assignment.assigned_at
-    )
+    return format_assignment_response(assignment)
 
 
 @router.get("/my-events", response_model=List[EventListResponse])
 def get_judge_assigned_events(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.JUDGE, UserRole.ADMIN))
+    current_user: User = Depends(require_role(UserRole.JUDGE, UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
 ):
     """
-    Returns only events specifically assigned to this logged-in Judge.
-    Strictly prevents seeing/scoring unassigned events.
+    Returns events specifically assigned to this logged-in Judge,
+    or coordinated events if the caller is an Event Coordinator.
     """
     if current_user.role == UserRole.ADMIN:
         events = db.query(Event).all()
+        return [format_event_response(e) for e in events]
+
+    if current_user.role == UserRole.EVENT_COORDINATOR:
+        events = db.query(Event).filter(Event.coordinator_id == current_user.id).all()
         return [format_event_response(e) for e in events]
 
     assignments = db.query(JudgeAssignment).filter(JudgeAssignment.judge_id == current_user.id).all()
@@ -71,20 +92,31 @@ def get_event_judge_assignments(
     current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
 ):
     assignments = db.query(JudgeAssignment).filter(JudgeAssignment.event_id == event_id).all()
-    return [
-        JudgeAssignmentResponse(
-            id=a.id,
-            event_id=a.event_id,
-            event_title=a.event.title,
-            judge_id=a.judge_id,
-            judge_name=a.judge.full_name,
-            round_id=a.round_id,
-            round_name=a.round.name if a.round else None,
-            status=a.status,
-            assigned_at=a.assigned_at
-        )
-        for a in assignments
-    ]
+    return [format_assignment_response(a) for a in assignments]
+
+
+@router.delete("/assignments/{assignment_id}", status_code=status.HTTP_200_OK)
+def unassign_judge(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
+):
+    assignment = db.query(JudgeAssignment).filter(JudgeAssignment.id == assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Judge assignment not found")
+
+    db.delete(assignment)
+    db.commit()
+
+    log_action(
+        db,
+        action="JUDGE_UNASSIGNED",
+        entity_type="JudgeAssignment",
+        entity_id=str(assignment_id),
+        user_id=current_user.id,
+        old_values={"judge_id": assignment.judge_id, "event_id": assignment.event_id}
+    )
+    return {"success": True, "message": "Judge assignment removed"}
 
 
 @router.post("/criteria", response_model=ScoreCriteriaResponse, status_code=status.HTTP_201_CREATED)
@@ -125,3 +157,22 @@ def get_event_criteria(
     if round_id:
         query = query.filter(ScoreCriteria.round_id == round_id)
     return query.all()
+
+
+@router.delete("/criteria/{criteria_id}", status_code=status.HTTP_200_OK)
+def delete_score_criteria(
+    criteria_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
+):
+    criteria = db.query(ScoreCriteria).filter(ScoreCriteria.id == criteria_id).first()
+    if not criteria:
+        raise HTTPException(status_code=404, detail="Criteria not found")
+
+    event = criteria.event
+    if current_user.role == UserRole.EVENT_COORDINATOR and event.coordinator_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized to delete criteria for this event")
+
+    db.delete(criteria)
+    db.commit()
+    return {"success": True, "message": "Criteria removed"}
