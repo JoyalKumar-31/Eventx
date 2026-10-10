@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Any
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from app.models.enums import UserRole
@@ -138,3 +138,17 @@ class UserDetailResponse(BaseModel):
     coordinator_profile: Optional[CoordinatorProfileResponse] = None
     judge_profile: Optional[JudgeProfileResponse] = None
     sponsor_profile: Optional[SponsorProfileResponse] = None
+
+
+class UserProfileUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    phone_number: Optional[str] = None  # Alias for frontend tolerance
+    college_name: Optional[str] = None
+    student_id_number: Optional[str] = None
+    roll_number: Optional[str] = None  # Alias for frontend tolerance
+    department: Optional[str] = None
+    year_of_study: Optional[Any] = None  # Can accept string or int from frontend form
+

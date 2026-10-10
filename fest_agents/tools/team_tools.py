@@ -5,27 +5,6 @@ tools/team_tools.py - Participant & Team Management Tools
 from typing import Dict, Any, Optional, List
 from .event_tools import get_event_details
 
-# Sample database of participants and registered teams
-TEAMS_DB = {
-    "REG-101": {
-        "team_name": "CyberKnights",
-        "event": "TechSprint 24-Hour Hackathon",
-        "leader": "Aarav Sharma",
-        "members": ["Aarav Sharma", "Priya Verma", "Rohan Mehta"],
-        "payment_status": "PAID",
-        "qr_pass_code": "PASS-CYBER-101",
-        "attendance_checked_in": True
-    },
-    "REG-102": {
-        "team_name": "MechaTitans",
-        "event": "RoboWars: Clash of Titans",
-        "leader": "Aditya Singh",
-        "members": ["Aditya Singh", "Sneha Patel"],
-        "payment_status": "PENDING_UPI_VERIFICATION",
-        "qr_pass_code": "PASS-MECHA-102",
-        "attendance_checked_in": False
-    }
-}
 
 
 def validate_team_size(event_name: str, member_count: int) -> Dict[str, Any]:
@@ -114,20 +93,6 @@ def check_registration_status(reg_id: str) -> Dict[str, Any]:
     except Exception:
         pass
 
-    # Fallback to in-memory TEAMS_DB
-    if reg_key in TEAMS_DB:
-        team = TEAMS_DB[reg_key]
-        return {
-            "found": True,
-            "registration_id": reg_key,
-            "team_name": team["team_name"],
-            "event": team["event"],
-            "leader": team["leader"],
-            "members_count": len(team["members"]),
-            "payment_status": team["payment_status"],
-            "qr_pass": team["qr_pass_code"],
-            "attendance": "Checked In" if team["attendance_checked_in"] else "Not Checked In"
-        }
     return {
         "found": False,
         "message": f"No registration record found for ID '{reg_id}'."
@@ -185,20 +150,6 @@ def verify_qr_entry_pass(pass_code: str) -> Dict[str, Any]:
     except Exception:
         pass
 
-    # Fallback to TEAMS_DB
-    for reg_id, team in TEAMS_DB.items():
-        if team["qr_pass_code"] == code:
-            if team["payment_status"] != "PAID":
-                return {
-                    "granted": False,
-                    "reason": "Payment pending! Please clear UPI dues at the registration counter."
-                }
-            return {
-                "granted": True,
-                "team_name": team["team_name"],
-                "event": team["event"],
-                "message": f"Entry Approved for {team['team_name']}!"
-            }
     return {
         "granted": False,
         "reason": f"Invalid or unrecognized pass code '{pass_code}'."
@@ -283,21 +234,39 @@ def register_student_for_event(
 
             if existing_reg:
                 venue_name = matched_event.venue.name if matched_event.venue else "Campus Arena"
+                is_free = (float(matched_event.registration_fee or 0) == 0.0)
+                has_paid = any(p.status.value == "SUCCESS" for p in existing_reg.payments) if existing_reg.payments else False
+                is_cleared = is_free or (existing_reg.status == RegistrationStatus.CONFIRMED and has_paid)
+
+                if is_cleared:
+                    pass_info = (
+                        f"• **Status**: `CONFIRMED`\n"
+                        f"• **Pass Code**: `{existing_reg.qr_code_hash}`\n\n"
+                        f"View your digital QR pass in your [Student Passes Portal](/student/passes) or [My Registrations](/student/registrations)."
+                    )
+                    pass_val = existing_reg.qr_code_hash
+                else:
+                    fee_val = f"₹{float(matched_event.registration_fee):.0f}"
+                    pass_info = (
+                        f"• **Status**: `PENDING PAYMENT` (Fee: {fee_val})\n"
+                        f"• **Pass Code**: 🔒 Locked (Payment Pending)\n\n"
+                        f"⚠️ **Payment Required**: Please go to [My Registrations](/student/registrations) and click **Pay {fee_val}** to complete payment and unlock your digital QR code."
+                    )
+                    pass_val = "🔒 Locked (Payment Pending)"
+
                 return {
                     "success": True,
                     "already_registered": True,
                     "registration_number": existing_reg.registration_number,
                     "event_title": matched_event.title,
-                    "status": existing_reg.status.value,
-                    "qr_pass": existing_reg.qr_code_hash,
+                    "status": "CONFIRMED" if is_cleared else "PENDING_PAYMENT",
+                    "qr_pass": pass_val,
                     "venue": venue_name,
                     "message": (
                         f"You are already registered for **{matched_event.title}**!\n\n"
                         f"• **Registration Number**: `{existing_reg.registration_number}`\n"
-                        f"• **Status**: `{existing_reg.status.value}`\n"
-                        f"• **Pass Code**: `{existing_reg.qr_code_hash}`\n"
-                        f"• **Venue**: {venue_name}\n\n"
-                        f"View your digital QR pass in your [Student Passes Portal](/student/passes)."
+                        f"• **Venue**: {venue_name}\n"
+                        + pass_info
                     )
                 }
 
@@ -327,7 +296,8 @@ def register_student_for_event(
             # 5. Create Registration Record
             reg_num = f"REG-{matched_event.id:03d}-{uuid.uuid4().hex[:6].upper()}"
             qr_hash = f"PASS-{hashlib.sha256(f'{reg_num}:{matched_event.id}:{user.id}:{uuid.uuid4()}'.encode()).hexdigest()[:12].upper()}"
-            status_val = RegistrationStatus.CONFIRMED if matched_event.registration_fee == 0 else RegistrationStatus.PENDING_PAYMENT
+            is_free = (float(matched_event.registration_fee or 0) == 0.0)
+            status_val = RegistrationStatus.CONFIRMED if is_free else RegistrationStatus.PENDING_PAYMENT
 
             new_reg = Registration(
                 registration_number=reg_num,
@@ -349,7 +319,7 @@ def register_student_for_event(
                     entity_type="Registration",
                     entity_id=str(new_reg.id),
                     user_id=user.id,
-                    new_values={"event": matched_event.title, "registration_number": reg_num}
+                    new_values={"event": matched_event.title, "registration_number": reg_num, "status": status_val.value}
                 )
             except Exception:
                 pass
@@ -357,6 +327,38 @@ def register_student_for_event(
             start_str = matched_event.start_time.strftime("%d %b, %I:%M %p") if matched_event.start_time else "TBA"
             venue_str = matched_event.venue.name if matched_event.venue else "Campus Arena"
             fee_str = f"₹{float(matched_event.registration_fee):.0f}" if matched_event.registration_fee > 0 else "Free Entry"
+
+            if is_free:
+                msg = (
+                    f"🎉 **Registration Confirmed for {matched_event.title}!**\n\n"
+                    f"• **Registration ID**: `{reg_num}`\n"
+                    f"• **Participant**: {user.full_name}\n"
+                    f"• **Event Category**: {matched_event.category.name if matched_event.category else 'General'}\n"
+                    f"• **Date & Time**: {start_str}\n"
+                    f"• **Venue**: {venue_str}\n"
+                    f"• **Fee**: Free Entry (Status: `CONFIRMED`)\n"
+                    f"• **Digital Pass Key**: `{qr_hash}`\n"
+                    + (f"• **Team Name**: {created_team.name} (Share Invite Code: `{created_team.invite_code}`)\n" if created_team else "")
+                    + f"\nYour QR entry pass has been generated! You can access it anytime in your [Student Passes](/student/passes) or [My Registrations](/student/registrations)."
+                )
+                pass_key_output = qr_hash
+            else:
+                msg = (
+                    f"📋 **Registration Initiated for {matched_event.title}!**\n\n"
+                    f"• **Registration ID**: `{reg_num}`\n"
+                    f"• **Participant**: {user.full_name}\n"
+                    f"• **Event Category**: {matched_event.category.name if matched_event.category else 'General'}\n"
+                    f"• **Date & Time**: {start_str}\n"
+                    f"• **Venue**: {venue_str}\n"
+                    f"• **Registration Fee**: {fee_str}\n"
+                    f"• **Registration Status**: `PENDING PAYMENT`\n"
+                    f"• **Digital QR Pass**: 🔒 Locked (Payment Pending)\n"
+                    + (f"• **Team Name**: {created_team.name} (Share Invite Code: `{created_team.invite_code}`)\n" if created_team else "")
+                    + f"\n⚠️ **Payment Pending**: Because this is a paid event ({fee_str}), your registration is in **Pending Payment** status. "
+                    f"Please navigate to [My Registrations](/student/registrations) and click **Pay {fee_str}**. "
+                    f"Once your payment is completed, your official digital QR entry pass will be unlocked and available in My Registrations!"
+                )
+                pass_key_output = "🔒 Locked (Payment Pending)"
 
             return {
                 "success": True,
@@ -367,22 +369,12 @@ def register_student_for_event(
                 "venue": venue_str,
                 "schedule": start_str,
                 "fee": fee_str,
+                "is_paid": is_free,
                 "status": status_val.value,
-                "qr_pass": qr_hash,
+                "qr_pass": pass_key_output,
                 "team_name": created_team.name if created_team else "Individual",
                 "invite_code": created_team.invite_code if created_team else None,
-                "message": (
-                    f"🎉 **Registration Confirmed for {matched_event.title}!**\n\n"
-                    f"• **Registration ID**: `{reg_num}`\n"
-                    f"• **Participant**: {user.full_name}\n"
-                    f"• **Event Category**: {matched_event.category.name if matched_event.category else 'General'}\n"
-                    f"• **Date & Time**: {start_str}\n"
-                    f"• **Venue**: {venue_str}\n"
-                    f"• **Fee**: {fee_str} (Status: `{status_val.value}`)\n"
-                    f"• **Digital Pass Key**: `{qr_hash}`\n"
-                    + (f"• **Team Name**: {created_team.name} (Share Invite Code: `{created_team.invite_code}`)\n" if created_team else "")
-                    + f"\nYour QR entry pass has been generated! You can access it anytime in your [Student Passes](/student/passes) or [Registrations](/student/registrations)."
-                )
+                "message": msg
             }
         finally:
             db.close()
@@ -416,14 +408,21 @@ def get_user_registrations(user_id: Optional[int] = None, user_email: Optional[s
 
             regs = db.query(Registration).filter(Registration.user_id == user.id).all()
             output = []
+            from app.models.enums import RegistrationStatus
             for r in regs:
                 start_str = r.event.start_time.strftime("%d %b, %I:%M %p") if (r.event and r.event.start_time) else "TBA"
                 venue_str = r.event.venue.name if (r.event and r.event.venue) else "Campus Arena"
+                fee = float(r.event.registration_fee or 0) if r.event else 0.0
+                has_paid = any(p.status.value == "SUCCESS" for p in r.payments) if r.payments else False
+                is_cleared = (fee == 0.0) or (r.status == RegistrationStatus.CONFIRMED and has_paid)
+
                 output.append({
                     "registration_number": r.registration_number,
                     "event_title": r.event.title if r.event else "N/A",
-                    "status": r.status.value,
-                    "qr_pass": r.qr_code_hash,
+                    "status": "CONFIRMED" if is_cleared else "PENDING_PAYMENT",
+                    "is_paid": is_cleared,
+                    "fee": fee,
+                    "qr_pass": r.qr_code_hash if is_cleared else "🔒 Locked (Payment Pending)",
                     "venue": venue_str,
                     "time": start_str,
                     "team_name": r.team.name if r.team else "Individual",

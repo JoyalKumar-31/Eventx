@@ -23,7 +23,7 @@ import { agentsApi } from "../api/agentsApi";
 import { useAuth } from "../auth/AuthContext";
 
 export default function FestAICopilot() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -110,6 +110,7 @@ export default function FestAICopilot() {
         event_context: {
           user_id: user?.id,
           user_name: user?.full_name,
+          user_email: user?.email,
           user_role: effectiveRole,
         },
         history: historyTurns,
@@ -126,6 +127,12 @@ export default function FestAICopilot() {
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
+
+      if (res.action === "profile_updated" || (res.response && res.response.includes("Profile Updated"))) {
+        if (typeof refreshUser === "function") {
+          await refreshUser();
+        }
+      }
     } catch (err) {
       console.error("AI Copilot request error", err);
       const errorMsg = {

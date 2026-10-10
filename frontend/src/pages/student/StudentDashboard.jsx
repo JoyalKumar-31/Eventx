@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  Lock,
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { registrationApi } from "../../api/registrationApi";
@@ -55,12 +56,16 @@ export default function StudentDashboard() {
     }
   };
 
-  const pendingPayments = registrations.filter(
-    (r) => r.status === "PENDING" && r.payment_status === "UNPAID"
-  );
-  const confirmedRegistrations = registrations.filter(
-    (r) => r.status === "CONFIRMED" || r.payment_status === "PAID"
-  );
+  const pendingPayments = registrations.filter((r) => {
+    const fee = Number(r.registration_fee ?? r.event?.registration_fee ?? 0);
+    const isPaid = fee === 0 || r.payment_status === "PAID" || r.payment_status === "SUCCESS";
+    return !isPaid && fee > 0;
+  });
+  const confirmedRegistrations = registrations.filter((r) => {
+    const fee = Number(r.registration_fee ?? r.event?.registration_fee ?? 0);
+    const isPaid = fee === 0 || r.payment_status === "PAID" || r.payment_status === "SUCCESS";
+    return isPaid && (r.status === "CONFIRMED" || fee === 0);
+  });
 
   return (
     <div className="space-y-8">
@@ -286,36 +291,54 @@ export default function StudentDashboard() {
           </div>
         ) : (
           <div className="divide-y divide-slate-800">
-            {registrations.slice(0, 5).map((reg) => (
-              <div
-                key={reg.id}
-                className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-800/40 transition-colors"
-              >
-                <div>
-                  <div className="text-sm font-bold text-white hover:text-indigo-400">
-                    <Link to={`/events/${reg.event_id}`}>{reg.event?.title || `Event #${reg.event_id}`}</Link>
+            {registrations.slice(0, 5).map((reg) => {
+              const fee = Number(reg.registration_fee ?? reg.event?.registration_fee ?? 0);
+              const isPaid = fee === 0 || reg.payment_status === "PAID" || reg.payment_status === "SUCCESS";
+
+              return (
+                <div
+                  key={reg.id}
+                  className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-800/40 transition-colors"
+                >
+                  <div>
+                    <div className="text-sm font-bold text-white hover:text-indigo-400">
+                      <Link to={`/events/${reg.event_id}`}>{reg.event?.title || `Event #${reg.event_id}`}</Link>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-3">
+                      <span>Format: {reg.event?.event_format || "SOLO"}</span>
+                      {reg.team && (
+                        <span className="text-indigo-300">Team: {reg.team.name}</span>
+                      )}
+                      {fee > 0 && (
+                        <span>Fee: <strong className="text-slate-200">₹{fee}</strong></span>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-3">
-                    <span>Format: {reg.event?.event_format || "SOLO"}</span>
-                    {reg.team && (
-                      <span className="text-indigo-300">Team: {reg.team.name}</span>
+
+                  <div className="flex items-center gap-3 self-end sm:self-center">
+                    <StatusBadge status={isPaid ? reg.status : "PENDING_PAYMENT"} />
+                    {isPaid ? (
+                      <button
+                        onClick={() => setSelectedPassRegId(reg.id)}
+                        className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all text-xs font-medium flex items-center gap-1.5"
+                        title="View QR Pass"
+                      >
+                        <QrCode className="w-4 h-4 text-indigo-400" />
+                        <span>Pass</span>
+                      </button>
+                    ) : (
+                      <Link
+                        to="/student/registrations"
+                        className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-medium flex items-center gap-1.5"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Pay ₹{fee}</span>
+                      </Link>
                     )}
                   </div>
                 </div>
-
-                <div className="flex items-center gap-3 self-end sm:self-center">
-                  <StatusBadge status={reg.status} />
-                  <button
-                    onClick={() => setSelectedPassRegId(reg.id)}
-                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all text-xs font-medium flex items-center gap-1.5"
-                    title="View QR Pass"
-                  >
-                    <QrCode className="w-4 h-4 text-indigo-400" />
-                    <span>Pass</span>
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

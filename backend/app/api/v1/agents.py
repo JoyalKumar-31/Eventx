@@ -35,6 +35,9 @@ class AgentChatResponse(BaseModel):
     trace: List[str] = []
     user_role: str
     agent_name: str
+    action: Optional[str] = None
+    action_data: Optional[Dict[str, Any]] = None
+
 
 
 ROLE_AGENT_NAMES = {
@@ -94,6 +97,16 @@ def chat_with_agents(
 
     route_taken = result.get("route", "faq_agent")
     agent_display = ROLE_AGENT_NAMES.get(route_taken, "Fest AI Assistant")
+    tool_outputs = result.get("tool_outputs") or {}
+
+    action_type = None
+    action_data = None
+    if "profile_action" in tool_outputs:
+        action_type = "profile_updated"
+        action_data = tool_outputs["profile_action"]
+    elif "action_result" in tool_outputs:
+        action_type = "event_registered"
+        action_data = tool_outputs["action_result"]
 
     return AgentChatResponse(
         success=True,
@@ -101,7 +114,9 @@ def chat_with_agents(
         route_taken=route_taken,
         trace=result.get("history", []),
         user_role=user_role,
-        agent_name=agent_display
+        agent_name=agent_display,
+        action=action_type,
+        action_data=action_data
     )
 
 

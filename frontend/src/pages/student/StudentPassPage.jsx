@@ -19,9 +19,11 @@ export default function StudentPassPage() {
       setLoading(true);
       const data = await registrationApi.getMyRegistrations();
       // Only keep confirmed or paid registrations that have a pass
-      const valid = (data || []).filter(
-        (r) => r.status === "CONFIRMED" || r.payment_status === "PAID" || Number(r.registration_fee ?? r.event?.registration_fee ?? 0) === 0
-      );
+      const valid = (data || []).filter((r) => {
+        const fee = Number(r.registration_fee ?? r.event?.registration_fee ?? 0);
+        const isPaid = fee === 0 || r.payment_status === "PAID" || r.payment_status === "SUCCESS";
+        return isPaid && (r.status === "CONFIRMED" || fee === 0);
+      });
       setRegistrations(valid);
     } catch (err) {
       console.error("Failed to load passes", err);

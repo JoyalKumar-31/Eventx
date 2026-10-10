@@ -20,6 +20,12 @@ from .judging_tools import (
 )
 from .analytics_tools import get_fest_analytics, get_sponsor_reports
 from .cert_tools import generate_certificate_text, draft_announcement
+from .profile_tools import (
+    update_student_profile,
+    get_student_profile,
+    parse_profile_update_intent,
+    normalize_year_of_study
+)
 
 __all__ = [
     "get_all_events",
@@ -39,5 +45,9 @@ __all__ = [
     "get_fest_analytics",
     "get_sponsor_reports",
     "generate_certificate_text",
-    "draft_announcement"
+    "draft_announcement",
+    "update_student_profile",
+    "get_student_profile",
+    "parse_profile_update_intent",
+    "normalize_year_of_study"
 ]

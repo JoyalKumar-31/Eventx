@@ -1,29 +1,48 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { User, Mail, Phone, School, BookOpen, Calendar, ShieldCheck, Check } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import apiClient from "../../api/client";
 
 export default function StudentProfilePage() {
-  const { user } = useAuth();
-  const [phoneNumber, setPhoneNumber] = useState(user?.phone_number || "");
+  const { user, refreshUser } = useAuth();
+  const [phoneNumber, setPhoneNumber] = useState(user?.phone || user?.phone_number || "");
   const [college, setCollege] = useState(user?.student_profile?.college_name || "");
-  const [rollNumber, setRollNumber] = useState(user?.student_profile?.roll_number || "");
+  const [rollNumber, setRollNumber] = useState(user?.student_profile?.student_id_number || user?.student_profile?.roll_number || "");
   const [department, setDepartment] = useState(user?.student_profile?.department || "");
-  const [year, setYear] = useState(user?.student_profile?.year_of_study || 1);
+  const [year, setYear] = useState(user?.student_profile?.year_of_study || "1st Year");
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
+
+  useEffect(() => {
+    if (user) {
+      setPhoneNumber(user.phone || user.phone_number || "");
+      setCollege(user.student_profile?.college_name || "");
+      setRollNumber(user.student_profile?.student_id_number || user.student_profile?.roll_number || "");
+      setDepartment(user.student_profile?.department || "");
+      setYear(user.student_profile?.year_of_study || "1st Year");
+    }
+  }, [user]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       setSaving(true);
       setMessage(null);
-      // Optional profile sync endpoint or simulated state
-      setMessage({ type: "success", text: "Profile updated successfully." });
+      await apiClient.put("/users/profile", {
+        phone: phoneNumber,
+        college_name: college,
+        student_id_number: rollNumber,
+        department,
+        year_of_study: year,
+      });
+      if (typeof refreshUser === "function") {
+        await refreshUser();
+      }
+      setMessage({ type: "success", text: "Profile updated and saved successfully." });
     } catch (err) {
       console.error("Failed to update profile", err);
-      setMessage({ type: "error", text: "Failed to update profile." });
+      setMessage({ type: "error", text: err.response?.data?.detail || "Failed to update profile." });
     } finally {
       setSaving(false);
     }
@@ -146,14 +165,14 @@ export default function StudentProfilePage() {
             </label>
             <select
               value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
+              onChange={(e) => setYear(e.target.value)}
               className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
             >
-              <option value={1}>1st Year</option>
-              <option value={2}>2nd Year</option>
-              <option value={3}>3rd Year</option>
-              <option value={4}>4th Year</option>
-              <option value={5}>Postgraduate / PhD</option>
+              <option value="1st Year">1st Year</option>
+              <option value="2nd Year">2nd Year</option>
+              <option value="3rd Year">3rd Year</option>
+              <option value="4th Year">4th Year</option>
+              <option value="Postgraduate / PhD">Postgraduate / PhD</option>
             </select>
           </div>
         </div>

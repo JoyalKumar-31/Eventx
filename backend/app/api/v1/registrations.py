@@ -241,6 +241,17 @@ def get_qr_entry_pass(
     if current_user.role not in [UserRole.ADMIN, UserRole.EVENT_COORDINATOR] and reg.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized to view this entry pass")
 
+    # Guard: Paid events require completed payment before QR ticket pass can be generated/viewed
+    fee = float(reg.event.registration_fee or 0) if reg.event else 0.0
+    has_paid = any(p.status.value == "SUCCESS" for p in reg.payments) if reg.payments else False
+    is_cleared = (fee == 0.0) or (reg.status == RegistrationStatus.CONFIRMED and has_paid)
+
+    if not is_cleared and current_user.role not in [UserRole.ADMIN, UserRole.EVENT_COORDINATOR]:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Payment required! Entry pass for '{reg.event.title}' is locked until the registration fee of ₹{fee:.0f} is cleared."
+        )
+
     payload_str = build_qr_pass_payload(reg.registration_number, reg.qr_code_hash, reg.event_id)
     qr_b64 = generate_qr_image_base64(payload_str)
 

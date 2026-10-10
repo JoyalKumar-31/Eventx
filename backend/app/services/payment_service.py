@@ -100,8 +100,9 @@ class PaymentService:
                             tr.status = RegistrationStatus.CONFIRMED
 
             # Generate Invoice
+            import uuid
             user = db.query(User).filter(User.id == payment.user_id).first()
-            inv_number = f"INV-{datetime.now().strftime('%Y%m')}-{payment.id:05d}"
+            inv_number = f"INV-{datetime.now().strftime('%Y%m')}-{payment.id:04d}-{uuid.uuid4().hex[:4].upper()}"
             tax = round(payment.amount * 0.18, 2) if payment.amount > 0 else 0.0
 
             invoice = Invoice(

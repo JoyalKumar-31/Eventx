@@ -29,7 +29,10 @@ from .tools import (
     get_fest_analytics,
     get_sponsor_reports,
     generate_certificate_text,
-    draft_announcement
+    draft_announcement,
+    update_student_profile,
+    get_student_profile,
+    parse_profile_update_intent
 )
 
 # Load environment variables
@@ -210,6 +213,11 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
 
         if has_any(["how to", "how can", "apply as", "where to apply", "registration process", "sign up", "signup", "register as", "candidacy", "onboard"]):
             return "faq_agent"
+        elif (
+            has_any(["profile", "department", "dept", "student id", "roll number", "roll no", "year of study", "college name"])
+            or (any(act in lower for act in ["change", "update", "set", "modify", "edit"]) and any(tgt in lower for tgt in ["year", "dept", "department", "phone", "mobile", "contact", "college", "university", "roll", "name", "profile"]))
+        ):
+            return "participant_agent"
         elif has_any(["score", "scores", "judge", "judging", "evaluat", "rubric", "rank", "ranking", "rankings", "leaderboard", "marks"]):
             return "judging_agent"
         elif has_any(["register", "registration", "enroll", "pass", "passes", "qr", "gate", "attendance", "checkin", "check-in", "squad", "team"]):
@@ -284,6 +292,30 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
         tool_outputs = state.get("tool_outputs") or {}
         if "action_result" in tool_outputs:
             return tool_outputs["action_result"]["message"]
+        if "profile_action" in tool_outputs:
+            return tool_outputs["profile_action"]["message"]
+        if "profile_view" in tool_outputs:
+            return tool_outputs["profile_view"]["message"]
+
+        # ACTION 0: Profile View / Update
+        is_profile_update = (
+            any(k in lower for k in ["change", "update", "edit", "modify", "set"]) and
+            any(f in lower for f in ["year", "dept", "department", "phone", "mobile", "contact", "college", "university", "roll", "student id", "name", "profile"])
+        ) or ("profile" in lower and any(k in lower for k in ["change", "update", "edit", "modify", "save"]))
+
+        if is_profile_update:
+            parsed_updates = parse_profile_update_intent(question)
+            if parsed_updates:
+                res = update_student_profile(
+                    user_id=user_id,
+                    user_email=user_email,
+                    updates=parsed_updates
+                )
+                return res["message"]
+
+        if any(k in lower for k in ["my profile", "show my profile", "view my profile", "what is my profile", "who am i", "what year am i"]):
+            res = get_student_profile(user_id=user_id, user_email=user_email)
+            return res["message"]
 
         # ACTION 1: Register student for event
         is_register_intent = any(k in lower for k in ["register me", "register for", "sign me up", "enroll me", "i want to register", "join event"])
@@ -324,17 +356,23 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
 
             cards = []
             for r in regs:
+                pass_str = r.get("qr_pass", "TBA")
+                if "Locked" in str(pass_str):
+                    pass_line = "  - Digital QR Pass: 🔒 Locked (Complete fee payment in [My Registrations](/student/registrations) to unlock)"
+                else:
+                    pass_line = f"  - Digital QR Pass: `{pass_str}`"
+
                 cards.append(
                     f"• **{r['event_title']}**\n"
                     f"  - Reg ID: `{r['registration_number']}` | Status: `{r['status']}`\n"
                     f"  - Schedule: {r['time']} at {r['venue']}\n"
-                    f"  - Digital QR Pass: `{r['qr_pass']}`"
+                    f"{pass_line}"
                 )
             return (
                 f"### 🎟️ Your EventX Registrations & Passes\n\n"
-                f"{greeting}! Here are your confirmed festival enrollments from our database:\n\n"
+                f"{greeting}! Here are your festival enrollments from our database:\n\n"
                 + "\n\n".join(cards)
-                + f"\n\nAccess your digital barcoded gate passes anytime in [Student Passes](/student/passes)."
+                + f"\n\nAccess your digital barcoded gate passes anytime in [Student Passes](/student/passes) or settle pending dues in [My Registrations](/student/registrations)."
             )
 
         # ACTION 3: Check-in / Gate Scan
@@ -592,7 +630,7 @@ USER REQUEST:
 
 Analyze the request and route to ONLY ONE of the following specialized agents:
 - event_agent: Event details, schedules, timings, venues, rules, schedule clashes.
-- participant_agent: Event registration, student registration action, team size limits, QR entry pass, gate attendance, my passes.
+- participant_agent: Event registration, student registration action, team size limits, QR entry pass, gate attendance, my passes, view profile, update or change profile details (year of study, department, phone, college name, student ID, full name).
 - judging_agent: Scoring rubrics, judge evaluations, score calculations, calculate marks, team rankings, assigned judging panels.
 - result_cert_agent: Publishing results, winner announcements, generating certificate text.
 - sponsor_analytics_agent: Fest revenue, participant counts, footfall, sponsor packages and reports.
@@ -668,6 +706,29 @@ def participant_team_agent(state: AgentState) -> Dict[str, Any]:
     lower = question.lower()
 
     # Pre-execute actions if detected
+    # 1. Profile Update
+    is_profile_update = (
+        any(k in lower for k in ["change", "update", "edit", "modify", "set"]) and
+        any(f in lower for f in ["year", "dept", "department", "phone", "mobile", "contact", "college", "university", "roll", "student id", "name", "profile"])
+    ) or ("profile" in lower and any(k in lower for k in ["change", "update", "edit", "modify", "save"]))
+
+    if is_profile_update:
+        parsed_updates = parse_profile_update_intent(question)
+        if parsed_updates:
+            tools_context["profile_action"] = update_student_profile(
+                user_id=context.get("user_id"),
+                user_email=context.get("user_email"),
+                updates=parsed_updates
+            )
+
+    # 2. Profile View
+    if any(k in lower for k in ["my profile", "show my profile", "view my profile", "what is my profile", "who am i", "what year am i"]):
+        tools_context["profile_view"] = get_student_profile(
+            user_id=context.get("user_id"),
+            user_email=context.get("user_email")
+        )
+
+    # 3. Event Registration
     if any(k in lower for k in ["register me", "register for", "sign me up", "enroll me", "i want to register", "join event"]):
         target = parse_registration_target(question)
         if target:
@@ -677,6 +738,7 @@ def participant_team_agent(state: AgentState) -> Dict[str, Any]:
                 user_email=context.get("user_email")
             )
 
+    # 4. Registrations & Passes
     if any(k in lower for k in ["my registration", "my registrations", "my pass", "my passes", "what events am i", "my events"]):
         tools_context["my_registrations"] = get_user_registrations(
             user_id=context.get("user_id"),
@@ -689,7 +751,7 @@ def participant_team_agent(state: AgentState) -> Dict[str, Any]:
 You are the Participant and Team Agent of EventX.
 USER INQUIRY: {question}
 CONTEXT & ACTIONS EXECUTED: {tools_context}
-Answer accurately and confirm any registrations or passes.
+Answer accurately and confirm any registrations, profile updates, or passes.
 """
     answer = invoke_llm(prompt, "participant_agent", state)
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, Download, Printer, ShieldCheck, MapPin, Calendar, Clock, User } from "lucide-react";
+import { X, Download, Printer, ShieldCheck, MapPin, Calendar, Clock, User, Lock } from "lucide-react";
 import { registrationApi } from "../api/registrationApi";
 
 export const QRPassModal = ({
@@ -10,15 +10,21 @@ export const QRPassModal = ({
 }) => {
   const [passData, setPassData] = useState(initialPassData);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
   const passRef = useRef(null);
 
   useEffect(() => {
     if (registrationId && !initialPassData) {
       setLoading(true);
+      setErrorMsg(null);
       registrationApi
         .getQREntryPass(registrationId)
         .then((res) => setPassData(res))
-        .catch((err) => console.error("Failed to load pass", err))
+        .catch((err) => {
+          const detail = err.response?.data?.detail;
+          const msg = typeof detail === "object" ? detail.message : (detail || "Payment required to view entry pass.");
+          setErrorMsg(msg);
+        })
         .finally(() => setLoading(false));
     } else if (initialPassData) {
       setPassData(initialPassData);
@@ -76,7 +82,15 @@ export const QRPassModal = ({
         {loading ? (
           <div className="py-16 text-center space-y-3">
             <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-xs text-slate-400">Generating Cryptographic Entry Pass...</p>
+            <p className="text-xs text-slate-400">Loading Cryptographic Entry Pass...</p>
+          </div>
+        ) : errorMsg ? (
+          <div className="py-12 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mx-auto">
+              <Lock className="w-6 h-6" />
+            </div>
+            <h4 className="text-base font-bold text-white">Payment Required</h4>
+            <p className="text-xs text-amber-300/90 max-w-xs mx-auto leading-relaxed">{errorMsg}</p>
           </div>
         ) : !passData ? (
           <div className="py-12 text-center text-xs text-slate-400">
