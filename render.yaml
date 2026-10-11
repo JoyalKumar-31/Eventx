@@ -11,12 +11,12 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: DATABASE_URL
-        sync: false
+        value: postgresql+psycopg://postgres.blxgujyshjlegkrdpxrn:%29jtu%28dhV_31@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres
       - key: DB_SSL
         value: "true"
       - key: JWT_SECRET_KEY
-        generateValue: true
+        value: 09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7
       - key: CORS_ORIGINS
-        sync: false
+        value: "https://eventx-eight.vercel.app,http://localhost:5173,http://localhost:3000"
       - key: GROQ_API_KEY
         sync: false

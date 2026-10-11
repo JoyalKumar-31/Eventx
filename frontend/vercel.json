@@ -2,7 +2,15 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/api/:path*",
+      "destination": "https://eventx-backend.onrender.com/api/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://eventx-backend.onrender.com/uploads/:path*"
+    },
+    {
+      "source": "/((?!api|uploads).*)",
       "destination": "/index.html"
     }
   ]
