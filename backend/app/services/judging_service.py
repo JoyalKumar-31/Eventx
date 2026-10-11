@@ -7,8 +7,9 @@ from fastapi import HTTPException, status
 from app.models.judging import JudgeAssignment, ScoreCriteria, Score, Result
 from app.models.event import Event
 from app.models.registration import Registration
+from app.models.attendance import Attendance
 from app.models.user import User
-from app.models.enums import JudgeAssignmentStatus, UserRole, EventStatus, NotificationType
+from app.models.enums import JudgeAssignmentStatus, UserRole, EventStatus, NotificationType, RegistrationStatus, AttendanceStatus
 from app.schemas.judging import ScoreSubmissionRequest
 from app.services.audit_service import log_action
 from app.services.notification_service import create_notification
@@ -120,6 +121,30 @@ def submit_scores(
     ).first()
     if not registration:
         raise HTTPException(status_code=400, detail="Participant registration does not match this event")
+
+    # Verify participant has gate attendance approval via QR scan
+    has_valid_attendance = (
+        registration.status == RegistrationStatus.ATTENDED
+        or db.query(Attendance).filter(
+            Attendance.registration_id == registration.id,
+            Attendance.event_id == event_id,
+            Attendance.entry_status == AttendanceStatus.VALID
+        ).first() is not None
+    )
+
+    if not has_valid_attendance:
+        participant_name = (
+            registration.team.name
+            if registration.team
+            else (registration.user.full_name if registration.user else f"Participant #{registration.id}")
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Gate check-in required! Cannot submit scores for {participant_name} "
+                f"because their attendance has not been approved via QR code scanning at the entrance yet."
+            )
+        )
 
     saved_scores = []
     for entry in submission.scores:

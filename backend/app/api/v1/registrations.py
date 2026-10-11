@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_current_user, require_role
-from app.models.enums import UserRole, EventStatus, RegistrationStatus, TeamStatus, PaymentStatus
+from app.models.enums import UserRole, EventStatus, RegistrationStatus, TeamStatus, PaymentStatus, AttendanceStatus
 from app.models.event import Event
 from app.models.registration import Registration, Team, TeamMember
 from app.models.attendance import Attendance
@@ -64,6 +64,8 @@ def format_reg_response(reg: Registration) -> RegistrationResponse:
     fee = reg.event.registration_fee if reg.event else 0.0
     p_status = latest_payment.status.value if latest_payment else ("FREE" if fee == 0 else "UNPAID")
     e_status = latest_attendance.entry_status.value if latest_attendance else "NOT_ENTERED"
+    has_valid_entry = any(a.entry_status == AttendanceStatus.VALID for a in reg.attendance_records) if reg.attendance_records else False
+    attended = (reg.status == RegistrationStatus.ATTENDED) or has_valid_entry or (e_status == "VALID")
 
     return RegistrationResponse(
         id=reg.id,
@@ -81,6 +83,8 @@ def format_reg_response(reg: Registration) -> RegistrationResponse:
         qr_code_hash=reg.qr_code_hash,
         payment_status=p_status,
         entry_status=e_status,
+        has_attended=attended,
+        is_attended=attended,
         registration_fee=fee,
         user=user_data,
         event=event_data,

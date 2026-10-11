@@ -150,8 +150,11 @@ export const QRPassModal = ({
                 </div>
               </div>
 
-              <p className="text-xs text-slate-400">
-                Present this QR code at the entrance scanner for venue admission.
+              <p className="text-xs text-slate-300 font-medium">
+                Present this QR code at the entrance scanner for gate check-in.
+              </p>
+              <p className="text-[11px] text-indigo-400/90 mt-1">
+                Gate approval activates your attendance so judges can record official scores.
               </p>
 
               {/* Ticket Metadata Roster */}

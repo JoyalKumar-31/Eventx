@@ -31,6 +31,7 @@ export default function JudgeScoringPage() {
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [refreshingRoster, setRefreshingRoster] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
   useEffect(() => {
@@ -56,6 +57,17 @@ export default function JudgeScoringPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const isAttendeeCheckedIn = (p) => {
+    if (!p) return false;
+    return Boolean(
+      p.has_attended === true ||
+      p.is_attended === true ||
+      p.status === "ATTENDED" ||
+      p.entry_status === "VALID" ||
+      p.entry_status === "ENTERED"
+    );
   };
 
   const processEvaluatedScores = (scoreList) => {
@@ -92,23 +104,37 @@ export default function JudgeScoringPage() {
       const evalMap = processEvaluatedScores(existingScores);
       setEvaluatedMap(evalMap);
 
-      const firstRegId = (parts && parts.length > 0) ? String(parts[0].id) : "";
-      setSelectedRegId(firstRegId);
+      setSelectedRegId((prev) => {
+        const targetRegId = (prev && parts && parts.some((p) => String(p.id) === String(prev)))
+          ? String(prev)
+          : (parts && parts.length > 0 ? String(parts[0].id) : "");
 
-      if (firstRegId && evalMap[firstRegId]) {
-        setScores({ ...evalMap[firstRegId].scores });
-        setRemarks(evalMap[firstRegId].remarks || "");
-      } else {
-        const initial = {};
-        (critList || []).forEach((c) => {
-          const maxVal = c.max_score || c.max_points || 10;
-          initial[c.id] = Math.round(maxVal * 0.7);
-        });
-        setScores(initial);
-        setRemarks("");
-      }
+        if (targetRegId && evalMap[targetRegId]) {
+          setScores({ ...evalMap[targetRegId].scores });
+          setRemarks(evalMap[targetRegId].remarks || "");
+        } else {
+          const initial = {};
+          (critList || []).forEach((c) => {
+            const maxVal = c.max_score || c.max_points || 10;
+            initial[c.id] = Math.round(maxVal * 0.7);
+          });
+          setScores(initial);
+          setRemarks("");
+        }
+        return targetRegId;
+      });
     } catch (err) {
       console.error("Failed to load event participants or criteria", err);
+    }
+  };
+
+  const handleRefreshRoster = async () => {
+    if (!selectedEventId || refreshingRoster) return;
+    try {
+      setRefreshingRoster(true);
+      await loadEventData(Number(selectedEventId));
+    } finally {
+      setRefreshingRoster(false);
     }
   };
 
@@ -149,6 +175,14 @@ export default function JudgeScoringPage() {
     e.preventDefault();
     if (!selectedEventId || !selectedRegId) return;
 
+    if (!isAttendeeCheckedIn(activeParticipant)) {
+      setFeedback({
+        type: "error",
+        text: "Gate check-in required! Cannot submit scores: Participant has not completed entrance QR scan check-in yet.",
+      });
+      return;
+    }
+
     try {
       setSubmitting(true);
       setFeedback(null);
@@ -179,9 +213,11 @@ export default function JudgeScoringPage() {
       });
     } catch (err) {
       console.error("Failed to submit score", err);
+      const detailMsg = err.response?.data?.detail;
+      const errorText = typeof detailMsg === "string" ? detailMsg : (detailMsg?.message || "Could not submit score. Please try again.");
       setFeedback({
         type: "error",
-        text: err.response?.data?.detail || "Could not submit score. Please try again.",
+        text: errorText,
       });
     } finally {
       setSubmitting(false);
@@ -282,13 +318,29 @@ export default function JudgeScoringPage() {
           {/* Competitor Selector Column */}
           <div className="lg:col-span-1 p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Users className="w-4 h-4 text-amber-400" />
-                Select Competitor
-              </h3>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                {Object.keys(evaluatedMap).length} / {participants.length} Evaluated
-              </span>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Users className="w-4 h-4 text-amber-400" />
+                  Select Competitor
+                </h3>
+                <button
+                  type="button"
+                  onClick={handleRefreshRoster}
+                  disabled={refreshingRoster}
+                  title="Refresh Roster & Gate Check-Ins"
+                  className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshingRoster ? "animate-spin text-amber-400" : ""}`} />
+                </button>
+              </div>
+              <div className="text-right">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                  {Object.keys(evaluatedMap).length} / {participants.length} Evaluated
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  {participants.filter(isAttendeeCheckedIn).length} / {participants.length} Gate Approved
+                </span>
+              </div>
             </div>
 
             <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
@@ -298,6 +350,7 @@ export default function JudgeScoringPage() {
                 const team = p.team_name || p.team?.name;
                 const isEvaluated = Boolean(evaluatedMap[String(p.id)]);
                 const evalData = evaluatedMap[String(p.id)];
+                const isCheckedIn = isAttendeeCheckedIn(p);
 
                 return (
                   <button
@@ -308,19 +361,31 @@ export default function JudgeScoringPage() {
                       isSelected
                         ? isEvaluated
                           ? "bg-emerald-500/15 border-emerald-500/60 shadow-lg shadow-emerald-500/10"
-                          : "bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5"
+                          : isCheckedIn
+                          ? "bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5"
+                          : "bg-rose-500/10 border-rose-500/40 shadow-lg shadow-rose-500/5"
                         : isEvaluated
                         ? "bg-slate-950/80 border-emerald-500/25 hover:border-emerald-500/50"
-                        : "bg-slate-950/60 border-slate-800/80 hover:border-slate-700"
+                        : isCheckedIn
+                        ? "bg-slate-950/60 border-slate-800/80 hover:border-slate-700"
+                        : "bg-slate-950/40 border-slate-800/50 opacity-80 hover:opacity-100 hover:border-slate-700"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="font-bold text-white text-sm truncate">
                         {name}
                       </div>
-                      {isEvaluated && (
+                      {isEvaluated ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
                           <CheckCircle2 className="w-3 h-3" /> {evalData.total.toFixed(1)} pts
+                        </span>
+                      ) : isCheckedIn ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">
+                          <CheckCircle2 className="w-2.5 h-2.5" /> Gate Cleared
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 shrink-0">
+                          <Clock className="w-2.5 h-2.5" /> Gate Pending
                         </span>
                       )}
                     </div>
@@ -329,8 +394,16 @@ export default function JudgeScoringPage() {
                       <span className="font-mono text-[11px] text-slate-500">#{p.registration_number || p.id}</span>
                     </div>
                     {!isEvaluated && (
-                      <div className="mt-1 text-[10px] text-amber-400/80 font-medium flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> Awaiting Scorecard
+                      <div className="mt-1 text-[10px] font-medium flex items-center gap-1">
+                        {isCheckedIn ? (
+                          <span className="text-amber-400/80 flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> Cleared for Scoring
+                          </span>
+                        ) : (
+                          <span className="text-rose-400/90 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" /> Gate QR Check-in Required
+                          </span>
+                        )}
                       </div>
                     )}
                   </button>
@@ -348,9 +421,20 @@ export default function JudgeScoringPage() {
                   <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">
                     Evaluating Competitor
                   </span>
-                  <h2 className="text-xl font-extrabold text-white">
-                    {activeParticipant?.participant_name || activeParticipant?.user?.full_name || "Selected Participant"}
-                  </h2>
+                  <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                    <h2 className="text-xl font-extrabold text-white">
+                      {activeParticipant?.participant_name || activeParticipant?.user?.full_name || "Selected Participant"}
+                    </h2>
+                    {isAttendeeCheckedIn(activeParticipant) ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        <CheckCircle2 className="w-3 h-3" /> Gate Checked-In
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        <Clock className="w-3 h-3" /> Gate Check-In Pending
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-400 mt-0.5">
                     {activeParticipant?.team_name ? `Team: ${activeParticipant.team_name}` : "Solo Entry"} • Registration #{activeParticipant?.registration_number || activeParticipant?.id}
                   </p>
@@ -365,6 +449,34 @@ export default function JudgeScoringPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Gate Attendance Banner */}
+              {!isAttendeeCheckedIn(activeParticipant) ? (
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-bold text-white text-sm flex items-center gap-2">
+                      Gate Attendance Approval Required
+                      <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        Awaiting QR Scan
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-200/90 leading-relaxed">
+                      This participant has not yet been verified at the venue gate. Festival regulations mandate that competitors must have their attendance QR code scanned and approved at the entrance before judges can award official marks.
+                    </p>
+                    <p className="text-[11px] text-slate-400 pt-0.5">
+                      💡 Once the gate coordinator scans this student's ticket, click <strong>"Refresh Roster"</strong> to immediately unlock scorecard evaluation.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2.5 text-xs text-emerald-300">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>
+                    <strong>Gate Check-In Approved</strong>: Participant verified at the venue gate. Cleared for judicial evaluation & rubric scoring.
+                  </span>
+                </div>
+              )}
 
               {/* Status banner if already evaluated */}
               {Boolean(evaluatedMap[String(selectedRegId)]) && (
@@ -428,23 +540,25 @@ export default function JudgeScoringPage() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className={`flex items-center gap-4 ${!isAttendeeCheckedIn(activeParticipant) ? "opacity-40 pointer-events-none" : ""}`}>
                           <input
                             type="range"
                             min="0"
                             max={maxScore}
                             step="1"
+                            disabled={!isAttendeeCheckedIn(activeParticipant)}
                             value={val}
                             onChange={(e) => handleScoreChange(c.id, e.target.value)}
-                            className="flex-1 accent-amber-500 h-2 bg-slate-800 rounded-lg cursor-pointer"
+                            className="flex-1 accent-amber-500 h-2 bg-slate-800 rounded-lg cursor-pointer disabled:cursor-not-allowed"
                           />
                           <input
                             type="number"
                             min="0"
                             max={maxScore}
+                            disabled={!isAttendeeCheckedIn(activeParticipant)}
                             value={val}
                             onChange={(e) => handleScoreChange(c.id, e.target.value)}
-                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs font-mono text-center text-white focus:outline-none focus:border-amber-500"
+                            className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs font-mono text-center text-white focus:outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
                       </div>
@@ -461,10 +575,15 @@ export default function JudgeScoringPage() {
                 </label>
                 <textarea
                   rows="3"
-                  placeholder="Constructive feedback, technical critique, or performance notes..."
+                  disabled={!isAttendeeCheckedIn(activeParticipant)}
+                  placeholder={
+                    isAttendeeCheckedIn(activeParticipant)
+                      ? "Constructive feedback, technical critique, or performance notes..."
+                      : "Awaiting gate attendance check-in before entering evaluation notes..."
+                  }
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 disabled:opacity-40 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -472,29 +591,46 @@ export default function JudgeScoringPage() {
             {/* Submit Action Button */}
             <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="text-xs text-slate-400">
-                {Boolean(evaluatedMap[String(selectedRegId)]) ? (
+                {!isAttendeeCheckedIn(activeParticipant) ? (
+                  <span className="text-rose-400/90 flex items-center gap-1.5 font-medium">
+                    <AlertCircle className="w-3.5 h-3.5" /> Gate entry pass QR scan approval required before scoring.
+                  </span>
+                ) : Boolean(evaluatedMap[String(selectedRegId)]) ? (
                   <span className="text-emerald-400 flex items-center gap-1.5 font-medium">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Scorecard active. Modifying sliders will update standings.
                   </span>
                 ) : (
                   <span className="text-amber-400/90 flex items-center gap-1.5 font-medium">
-                    <Clock className="w-3.5 h-3.5" /> Not yet evaluated. Submit official scores to record.
+                    <Clock className="w-3.5 h-3.5" /> Cleared for evaluation. Submit official scores to record.
                   </span>
                 )}
               </div>
 
               <button
                 type="submit"
-                disabled={submitting || criteria.length === 0 || !isEventCommenced()}
+                disabled={
+                  submitting ||
+                  criteria.length === 0 ||
+                  !isEventCommenced() ||
+                  !isAttendeeCheckedIn(activeParticipant)
+                }
                 className={`px-6 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs transition-all shadow-lg flex items-center gap-2 ${
-                  Boolean(evaluatedMap[String(selectedRegId)])
+                  !isAttendeeCheckedIn(activeParticipant)
+                    ? "bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed"
+                    : Boolean(evaluatedMap[String(selectedRegId)])
                     ? "bg-emerald-500 hover:bg-emerald-400 shadow-emerald-500/20"
                     : "bg-amber-500 hover:bg-amber-400 shadow-amber-500/20"
                 }`}
               >
-                <CheckCircle2 className="w-4 h-4" />
+                {!isAttendeeCheckedIn(activeParticipant) ? (
+                  <Clock className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
                 {!isEventCommenced()
                   ? "Scoring Opens on Event Day"
+                  : !isAttendeeCheckedIn(activeParticipant)
+                  ? "Awaiting Gate Check-In Approval (QR Scan Required)"
                   : submitting
                   ? (Boolean(evaluatedMap[String(selectedRegId)]) ? "Updating Scorecard..." : "Submitting Official Scorecard...")
                   : (Boolean(evaluatedMap[String(selectedRegId)]) ? "Update Official Scorecard" : "Submit Official Scorecard")}

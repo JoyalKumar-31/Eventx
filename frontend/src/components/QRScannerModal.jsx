@@ -193,7 +193,7 @@ export const QRScannerModal = ({ isOpen, onClose, eventId = null, onScanSuccess 
       setLastResult({
         status: "VALID",
         title: "ATTENDANCE CONFIRMED • ENTRY GRANTED",
-        message: `Welcome, ${participantName}! Verified for gate admission.`,
+        message: `Welcome, ${participantName}! Gate check-in confirmed & approved for judging.`,
         participant: participantName,
         email: res.participant_email || res.registration?.user?.email,
         event: eventTitle,

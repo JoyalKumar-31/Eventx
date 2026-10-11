@@ -64,6 +64,8 @@ class RegistrationResponse(BaseModel):
     qr_code_hash: str
     payment_status: Optional[str] = None
     entry_status: Optional[str] = None
+    has_attended: bool = False
+    is_attended: bool = False
     registration_fee: Optional[float] = 0.0
     user: Optional[Dict[str, Any]] = None
     event: Optional[Dict[str, Any]] = None

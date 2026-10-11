@@ -426,27 +426,48 @@ def get_event_participants_for_judging(
             if not ev:
                 return {"success": False, "message": "Could not identify the requested event."}
 
+            from app.models.attendance import Attendance
+            from app.models.enums import AttendanceStatus, RegistrationStatus
+
             regs = db.query(Registration).filter(Registration.event_id == ev.id).all()
             items = []
             evaluated_count = 0
+            checked_in_count = 0
 
             for r in regs:
                 p_name = r.user.full_name if r.user else "Student"
                 t_name = f" ({r.team.name})" if r.team else ""
+
+                is_checked_in = (
+                    r.status == RegistrationStatus.ATTENDED
+                    or db.query(Attendance).filter(
+                        Attendance.registration_id == r.id,
+                        Attendance.event_id == ev.id,
+                        Attendance.entry_status == AttendanceStatus.VALID
+                    ).first() is not None
+                )
+                if is_checked_in:
+                    checked_in_count += 1
+                    gate_badge = "🎫 **Gate Approved**"
+                else:
+                    gate_badge = "⏳ **Gate Check-In Pending**"
 
                 score_sum = db.query(func.sum(Score.score_value)).filter(Score.registration_id == r.id).scalar()
                 if score_sum is not None:
                     evaluated_count += 1
                     status_txt = f"✅ **Evaluated** (Score: `{round(float(score_sum), 2)} pts`)"
                 else:
-                    status_txt = "⏳ **Pending Evaluation**"
+                    if is_checked_in:
+                        status_txt = "⏳ **Awaiting Scorecard**"
+                    else:
+                        status_txt = "🚫 **Locked (Requires Gate QR Scan)**"
 
-                items.append(f"• **{p_name}**{t_name} | Reg: `{r.registration_number}` | Status: {status_txt}")
+                items.append(f"• **{p_name}**{t_name} | Reg: `{r.registration_number}` | Gate: {gate_badge} | Scoring: {status_txt}")
 
             roster_txt = "\n".join(items) if items else "• *No registered competitors found.*"
             msg = (
                 f"### 📋 Competitor Roster for {ev.title}\n\n"
-                f"• **Total Registered**: {len(regs)} | **Evaluated**: {evaluated_count} | **Pending**: {len(regs) - evaluated_count}\n\n"
+                f"• **Total Registered**: {len(regs)} | **Gate Checked-In**: {checked_in_count} | **Evaluated**: {evaluated_count} | **Pending**: {len(regs) - evaluated_count}\n\n"
                 f"{roster_txt}\n\n"
                 f"To submit marks, say: *'Score [marks] for [Name] in {ev.title}'* or open [Judge Scoring Console](/judge/scoring?event={ev.id})."
             )
@@ -600,6 +621,29 @@ def calculate_and_record_scores(
             saved_to_db = False
             effective_judge_id = judge_id or 7 # fallback to primary judge
             if matched_reg and matched_event:
+                # Enforce gate attendance check
+                from app.models.attendance import Attendance
+                from app.models.enums import AttendanceStatus, RegistrationStatus
+                has_attended = (
+                    matched_reg.status == RegistrationStatus.ATTENDED
+                    or db.query(Attendance).filter(
+                        Attendance.registration_id == matched_reg.id,
+                        Attendance.event_id == matched_event.id,
+                        Attendance.entry_status == AttendanceStatus.VALID
+                    ).first() is not None
+                )
+                if not has_attended:
+                    return {
+                        "success": False,
+                        "event_title": event_title,
+                        "team_name": team_label,
+                        "message": (
+                            f"⚠️ **Gate Attendance Approval Required**: Cannot submit official scores for **{team_label}**.\n\n"
+                            f"Participant has not been checked in at the event gate yet. "
+                            f"Their entry ticket QR code must be scanned and approved by the coordinator before judging scorecards can be recorded."
+                        )
+                    }
+
                 assignment = db.query(JudgeAssignment).filter(
                     JudgeAssignment.event_id == matched_event.id,
                     JudgeAssignment.judge_id == effective_judge_id
