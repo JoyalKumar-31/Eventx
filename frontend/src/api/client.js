@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? "https://eventx-backend-b6zs.onrender.com/api" : "/api");
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
