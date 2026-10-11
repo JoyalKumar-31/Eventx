@@ -152,10 +152,11 @@ def get_prompt_suggestions(
             "How do I verify attendee check-ins?",
         ],
         "judge": [
+            "Who got maximum score in Coding?",
+            "Show participants in Coding to evaluate",
+            "What events are assigned to me for evaluation?",
             "Show official evaluation scoring rubric and weightages",
             "How are team scores and rankings calculated?",
-            "What events are assigned to me for evaluation?",
-            "What is the maximum score per criteria?",
         ],
         "admin": [
             "Show total fest footfall, revenue, and check-in rate",

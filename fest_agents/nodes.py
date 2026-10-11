@@ -26,6 +26,13 @@ from .tools import (
     get_live_event_results,
     calculate_and_record_scores,
     get_judge_assigned_events,
+    resolve_event_for_judging,
+    get_event_maximum_score_and_standings,
+    get_event_participants_for_judging,
+    get_participant_scorecard,
+    get_event_criteria_and_rubrics,
+    add_event_scoring_criteria,
+    publish_or_finalize_event_results,
     get_fest_analytics,
     get_sponsor_reports,
     generate_certificate_text,
@@ -127,19 +134,32 @@ def parse_score_inputs(text: str) -> Tuple[Optional[str], Optional[str], Dict[st
             "Presentation & Impact": 23.0
         }
 
-    # 3. Extract Team Name or ID
-    team_match = re.search(r'\b(?:team|squad|participant|entry)\s+([a-zA-Z0-9_\-]+(?:\s+[a-zA-Z0-9_\-]+)?)', clean, re.IGNORECASE)
-    team_name = team_match.group(1).strip() if team_match else None
+    # 3. Extract Team Name, Participant, or Registration ID
+    team_name = None
+    reg_match = re.search(r'\b(REG-[0-9a-zA-Z\-]+)\b', clean, re.IGNORECASE)
+    if reg_match:
+        team_name = reg_match.group(1).strip()
+    else:
+        team_match = re.search(r'\b(?:team|squad|participant|entry)\s+([a-zA-Z0-9_\-]+(?:\s+[a-zA-Z0-9_\-]+)?)', clean, re.IGNORECASE)
+        if team_match:
+            team_name = team_match.group(1).strip()
+        else:
+            # Check pattern: "score 85 for [name] in [event]" or "give [name] 90" or "grade [name] 80"
+            comp_match = re.search(r'\b(?:for|to|give|evaluate|grade)\s+([a-zA-Z0-9_\-]+(?:\s+[a-zA-Z0-9_\-]+)?)(?:\s+(?:in|for|with|remarks?|marks?|score|points?|\d+)|$)', clean, re.IGNORECASE)
+            if comp_match:
+                cand = comp_match.group(1).strip()
+                if cand.lower() not in ["team", "squad", "event", "the", "student", "a"]:
+                    team_name = cand
+
     if not team_name:
-        reg_match = re.search(r'\b(REG-[0-9a-zA-Z\-]+)\b', clean, re.IGNORECASE)
-        team_name = reg_match.group(1).strip() if reg_match else "Team Alpha"
+        team_name = "Team Alpha"
 
     # 4. Extract Event Name
     event_match = re.search(r'\b(?:in|for|of)\s+([a-zA-Z0-9\s\-]+?)(?::|\s+with|\s+scores|\.|$)', clean, re.IGNORECASE)
     event_name = None
     if event_match:
         potential = event_match.group(1).strip()
-        if len(potential) > 3 and not potential.lower().startswith("team"):
+        if len(potential) > 3 and not potential.lower().startswith("team") and potential.lower() != team_name.lower():
             event_name = potential
 
     return event_name, team_name, scores_dict
@@ -218,11 +238,16 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
             or (any(act in lower for act in ["change", "update", "set", "modify", "edit"]) and any(tgt in lower for tgt in ["year", "dept", "department", "phone", "mobile", "contact", "college", "university", "roll", "name", "profile"]))
         ):
             return "participant_agent"
-        elif has_any(["score", "scores", "judge", "judging", "evaluat", "rubric", "rank", "ranking", "rankings", "leaderboard", "marks"]):
+        elif role == "judge" and (
+            has_any(["participant", "participants", "roster", "registered", "submission", "submissions", "who", "entry", "entries", "evaluate", "competitor", "competitors"])
+            or has_any(["assigned", "assign", "my event", "my events", "judge", "judging", "score", "scores", "evaluat", "rubric", "rank", "ranking", "leaderboard", "marks", "maximum", "highest", "top", "leader", "points", "grade"])
+        ):
+            return "judging_agent"
+        elif has_any(["score", "scores", "scored", "scoring", "judge", "judging", "evaluat", "evaluation", "evaluations", "rubric", "rubrics", "rank", "ranking", "rankings", "leaderboard", "standing", "standings", "marks", "marking", "grade", "grading", "highest score", "maximum score", "max score", "top score", "top scorer", "leading", "points", "winner", "winners", "scorecard", "criteria", "weightage", "roster", "assigned", "events i judge"]):
             return "judging_agent"
         elif has_any(["register", "registration", "enroll", "pass", "passes", "qr", "gate", "attendance", "checkin", "check-in", "squad", "team"]):
             return "participant_agent"
-        elif has_any(["cert", "certificate", "winner", "winners", "announc", "results"]):
+        elif has_any(["cert", "certificate", "announc"]):
             return "result_cert_agent"
         elif has_any(["sponsor", "sponsors", "analytic", "analytics", "revenue", "footfall", "financial", "funding", "stats"]):
             return "sponsor_analytics_agent"
@@ -433,13 +458,25 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
     # -------------------------------------------------------------
     elif agent_type == "judging_agent":
         tool_outputs = state.get("tool_outputs") or {}
+
+        # 0. Check pre-computed tool outputs
+        if "max_score_result" in tool_outputs:
+            return tool_outputs["max_score_result"]["message"]
+        if "participants_list" in tool_outputs:
+            return tool_outputs["participants_list"]["message"]
+        if "scorecard" in tool_outputs:
+            return tool_outputs["scorecard"]["message"]
+        if "add_criteria_result" in tool_outputs:
+            return tool_outputs["add_criteria_result"]["message"]
+        if "publish_result" in tool_outputs:
+            return tool_outputs["publish_result"]["message"]
         if "score_calculation" in tool_outputs:
             calc_res = tool_outputs["score_calculation"]
             breakdown_lines = "\n".join(
                 f"• **{item['criteria']}**: `{item['score']} / {item['max']} pts`"
                 for item in calc_res["breakdown"]
             )
-            db_saved_msg = "✅ **Evaluation permanently recorded into MySQL database.**" if calc_res["saved_to_db"] else "ℹ️ Calculated evaluation scorecard."
+            db_saved_msg = "✅ **Evaluation permanently recorded into MySQL database.**" if calc_res.get("saved_to_db") else "ℹ️ Calculated evaluation scorecard."
             return (
                 f"### ⚖️ Judge Scorecard & Leaderboard Calculation\n\n"
                 f"• **Event**: {calc_res['event_title']}\n"
@@ -451,27 +488,40 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
                 f"View all event scorecards in your [Judge Scoring Console](/judge/scoring)."
             )
 
-        # ACTION 1: Calculate and record scores
-        is_scoring_intent = any(k in lower for k in ["calculate", "score", "scores", "marks", "grade", "points", "evaluate"])
-        has_numbers = bool(re.search(r'\d+', question))
+        # ACTION 1: MAXIMUM SCORE & HIGHEST SCORER IN AN EVENT
+        is_max_score_query = (
+            any(k in lower for k in [
+                "maximum score", "max score", "highest score", "top score", "top scorer",
+                "who got maximum", "who got highest", "who is leading", "who scored highest",
+                "who won", "winner of", "best score", "highest marks", "max marks",
+                "who got the highest", "who got the maximum", "top mark", "leading in"
+            ])
+            or ("score" in lower and any(k in lower for k in ["maximum", "max", "highest", "top", "best", "who", "which"]))
+            or any(k in lower for k in ["rank", "ranking", "rankings", "leaderboard", "standing", "standings"])
+        )
+        if is_max_score_query:
+            res = get_event_maximum_score_and_standings(event_name_or_id=question, judge_id=user_id)
+            return res["message"]
 
-        if is_scoring_intent and has_numbers:
+        # ACTION 2: RECORD / CALCULATE SCORES
+        is_scoring_intent = (
+            any(k in lower for k in ["calculate", "score", "scores", "marks", "grade", "points", "evaluate", "give"])
+            and bool(re.search(r'\d+', question))
+        )
+        if is_scoring_intent:
             ev_name, team_name, scores_dict = parse_score_inputs(question)
             calc_res = calculate_and_record_scores(
-                event_name_or_id=ev_name or "Event",
-                team_or_reg_identifier=team_name or "Team Alpha",
+                event_name_or_id=ev_name or question,
+                team_or_reg_identifier=team_name or "Participant",
                 scores_dict=scores_dict,
-                judge_id=user_id if role in ["judge", "admin", "event_coordinator"] else None,
+                judge_id=user_id or 7,
                 remarks=f"Evaluated by {user_name or 'Judge'}"
             )
-
             breakdown_lines = "\n".join(
                 f"• **{item['criteria']}**: `{item['score']} / {item['max']} pts`"
                 for item in calc_res["breakdown"]
             )
-
-            db_saved_msg = "✅ **Evaluation permanently recorded into MySQL database.**" if calc_res["saved_to_db"] else "ℹ️ Calculated evaluation scorecard."
-
+            db_saved_msg = "✅ **Evaluation permanently recorded into MySQL database.**" if calc_res.get("saved_to_db") else "ℹ️ Calculated evaluation scorecard."
             return (
                 f"### ⚖️ Judge Scorecard & Leaderboard Calculation\n\n"
                 f"• **Event**: {calc_res['event_title']}\n"
@@ -483,51 +533,82 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
                 f"View all event scorecards in your [Judge Scoring Console](/judge/scoring)."
             )
 
-        # ACTION 2: Show my assigned events (Judge role)
-        if any(k in lower for k in ["assigned", "my event", "my events", "events i judge", "what do i judge"]):
-            if user_id:
-                assigned = get_judge_assigned_events(user_id)
-                if assigned:
-                    lines = []
-                    for a in assigned:
-                        lines.append(
-                            f"• **{a['title']}** ({a['category']})\n"
-                            f"  - Venue: {a['venue']} | Time: {a['time']}\n"
-                            f"  - Submissions: {a['total_submissions']} total ({a['evaluated_submissions']} evaluated, {a['pending_submissions']} pending)"
-                        )
-                    return (
-                        f"### ⚖️ Your Assigned Judging Competitions\n\n"
-                        f"{greeting}! Here are your designated evaluation panels from the database:\n\n"
-                        + "\n\n".join(lines)
-                        + f"\n\nTo score a submission, tell me *'Calculate scores for [Team] in {assigned[0]['title']}: Innovation 25, Technical 24...'*."
+        # ACTION 3: SHOW PARTICIPANTS / ROSTER TO JUDGE
+        is_roster_query = any(k in lower for k in [
+            "participants", "participant", "roster", "registered", "submissions",
+            "submission", "who can i judge", "who to evaluate", "competitors", "teams to judge"
+        ])
+        if is_roster_query:
+            res = get_event_participants_for_judging(event_name_or_id=question, judge_id=user_id)
+            return res["message"]
+
+        # ACTION 4: SCORECARD LOOKUP FOR SPECIFIC PARTICIPANT
+        is_scorecard_query = any(k in lower for k in [
+            "scorecard", "what did", "scores of", "score of", "marks of", "how much did", "view score"
+        ])
+        if is_scorecard_query:
+            res = get_participant_scorecard(participant_or_reg=question, event_name_or_id=question, judge_id=user_id)
+            return res["message"]
+
+        # ACTION 5: ASSIGNED EVENTS (Judge role)
+        if any(k in lower for k in ["assigned", "my event", "my events", "events i judge", "what do i judge", "my panels"]):
+            assigned = get_judge_assigned_events(user_id or 7)
+            if assigned:
+                lines = []
+                for a in assigned:
+                    lines.append(
+                        f"• **{a['title']}** ({a['category']})\n"
+                        f"  - Venue: {a['venue']} | Time: {a['time']}\n"
+                        f"  - Submissions: {a['total_submissions']} total ({a['evaluated_submissions']} evaluated, {a['pending_submissions']} pending)\n"
+                        f"  - [Open Scoring Console](/judge/scoring?event={a['event_id']})"
                     )
-
-        # ACTION 3: Show live event rankings / leaderboards
-        if any(k in lower for k in ["rank", "ranking", "rankings", "leaderboard", "standing", "standings"]):
-            live_standings = get_live_event_results(question)
-            if live_standings:
-                ev_title = live_standings[0].get("event", "Event")
-                stand_lines = "\n".join(
-                    f"• **{s['position']}**: {s['team_name']} — Score: **{s['total_score']} pts**"
-                    for s in live_standings
-                )
                 return (
-                    f"### 🏆 Live Leaderboard: {ev_title}\n\n"
-                    f"Current ranked standings computed from judge evaluations:\n\n"
-                    f"{stand_lines}\n\n"
-                    f"Full real-time rankings are published at [/results](/results)."
+                    f"### ⚖️ Your Assigned Judging Competitions\n\n"
+                    f"{greeting}! Here are your designated evaluation panels from the database:\n\n"
+                    + "\n\n".join(lines)
+                    + f"\n\nTo score any competitor, say *'Score 85 for [Participant] in {assigned[0]['title']}'* or open your [Judge Scoring Console](/judge/scoring)."
                 )
 
-        # Default Judging Rubric
-        rubric_data = get_evaluation_rubric("Technical")
-        rubric_items = rubric_data.get("rubric", {})
-        crit_str = "\n".join(f"• **{name}**: {pts} pts" for name, pts in rubric_items.items())
+        # ACTION 6: ADD / CREATE SCORING CRITERIA
+        if any(k in lower for k in ["add criteria", "create criteria", "new criteria"]):
+            m_crit = re.search(r'(?:criteria|criterion)\s+[\'"]?([a-zA-Z\s]+)[\'"]?', question, re.IGNORECASE)
+            c_name = m_crit.group(1).strip() if m_crit else "Code Quality"
+            m_pts = re.search(r'(\d+(?:\.\d+)?)\s*(?:marks?|points?|pts)?', question)
+            pts = float(m_pts.group(1)) if m_pts else 25.0
+            res = add_event_scoring_criteria(event_name_or_id=question, criteria_name=c_name, max_score=pts, judge_id=user_id)
+            return res["message"]
+
+        # ACTION 7: PUBLISH / FINALIZE RESULTS
+        if any(k in lower for k in ["publish results", "finalize results", "publish rankings", "announce winners"]):
+            res = publish_or_finalize_event_results(event_name_or_id=question, user_id=user_id)
+            return res["message"]
+
+        # ACTION 8: SCORING CRITERIA & RUBRICS
+        if any(k in lower for k in ["criteria", "rubric", "weightage", "marking scheme", "how is"]):
+            crit_data = get_event_criteria_and_rubrics(event_name_or_id=question)
+            crit_items = crit_data.get("rubric", {})
+            crit_str = "\n".join(f"• **{name}**: `{pts} pts`" for name, pts in crit_items.items())
+            return (
+                f"### ⚖️ Official Scoring Criteria & Rubric: {crit_data.get('event_title', 'Competition')}\n\n"
+                f"{crit_str}\n\n"
+                f"• **Total Aggregate Scale**: Maximum **{crit_data.get('max_score', 100)} points**.\n\n"
+                f"As a Judge, you can score submissions by saying: *'Score 85 for [Participant] in {crit_data.get('event_title')}'* "
+                f"or *'Calculate scores for [Team]: {', '.join(f'{k} 24' for k in list(crit_items.keys())[:3])}'*."
+            )
+
+        # Default Judging Guidance
+        crit_data = get_event_criteria_and_rubrics(event_name_or_id=question)
+        crit_items = crit_data.get("rubric", {})
+        crit_str = "\n".join(f"• **{name}**: `{pts} pts`" for name, pts in crit_items.items())
         return (
-            f"### ⚖️ Official EventX Judging Rubric\n\n"
-            f"{crit_str}\n\n"
-            f"• **Total Scale**: Maximum {rubric_data.get('max_score', 100)} points.\n\n"
-            f"As a Judge, you can tell me: *'Calculate scores for Team Alpha in Hackathon: Innovation 24, Technical 25, Presentation 22'* "
-            f"and I will automatically compute the weighted percentages, assign leader rankings, and save the marks to the database."
+            f"### ⚖️ Official EventX Judging Console\n\n"
+            f"**Scoring Criteria ({crit_data.get('event_title', 'Technical')})**:\n{crit_str}\n\n"
+            f"• **Total Scale**: Maximum {crit_data.get('max_score', 100)} points.\n\n"
+            f"⚖️ **Available Judge Actions**:\n"
+            f"• Ask *'Who got maximum score in {crit_data.get('event_title', 'Coding')}?'* to calculate the top scorer and standings.\n"
+            f"• Ask *'Show participants in {crit_data.get('event_title', 'Coding')}'* to list all registered competitors.\n"
+            f"• Ask *'Score 85 for [Participant] in {crit_data.get('event_title', 'Coding')}'* to record marks directly into the database.\n"
+            f"• Open your live [Judge Scoring Console](/judge/scoring)."
         )
 
     # -------------------------------------------------------------
@@ -642,7 +723,7 @@ USER REQUEST:
 Analyze the request and route to ONLY ONE of the following specialized agents:
 - event_agent: Event details, schedules, timings, venues, rules, schedule clashes.
 - participant_agent: Event registration, student registration action, team size limits, QR entry pass, gate attendance, my passes, view profile, update or change profile details (year of study, department, phone, college name, student ID, full name).
-- judging_agent: Scoring rubrics, judge evaluations, score calculations, calculate marks, team rankings, assigned judging panels.
+- judging_agent: Scoring rubrics, judge evaluations, score calculations, calculate marks, who got maximum score, highest score, leaderboard, team rankings, assigned judging panels, participant rosters to evaluate, and all judge website actions.
 - result_cert_agent: Publishing results, winner announcements, generating certificate text.
 - sponsor_analytics_agent: Fest revenue, participant counts, footfall, sponsor packages and reports.
 - faq_agent: Website navigation, registration procedures, roles, campus locations, helpdesk.
@@ -782,23 +863,81 @@ def judging_evaluation_agent(state: AgentState) -> Dict[str, Any]:
     attempt = state.get("attempts", 0)
     history = state.get("history", [])
     context = state.get("event_context", {})
+    user_id = context.get("user_id")
 
     tools_context = {}
     lower = question.lower()
 
-    if any(k in lower for k in ["calculate", "score", "scores", "marks", "grade", "points", "evaluate"]) and re.search(r'\d+', question):
-        ev_name, team_name, scores_dict = parse_score_inputs(question)
-        tools_context["score_calculation"] = calculate_and_record_scores(
-            event_name_or_id=ev_name or "Event",
-            team_or_reg_identifier=team_name or "Team Alpha",
-            scores_dict=scores_dict,
-            judge_id=context.get("user_id"),
-            remarks="Evaluated via Fest AI Judge Copilot"
+    # 1. Maximum Score / Top Scorer / Standings query
+    is_max_score_query = (
+        any(k in lower for k in [
+            "maximum score", "max score", "highest score", "top score", "top scorer",
+            "who got maximum", "who got highest", "who is leading", "who scored highest",
+            "who won", "winner of", "best score", "highest marks", "max marks",
+            "who got the highest", "who got the maximum", "top mark", "leading in"
+        ])
+        or ("score" in lower and any(k in lower for k in ["maximum", "max", "highest", "top", "best", "who", "which"]))
+        or any(k in lower for k in ["rank", "ranking", "rankings", "leaderboard", "standing", "standings"])
+    )
+    if is_max_score_query:
+        tools_context["max_score_result"] = get_event_maximum_score_and_standings(
+            event_name_or_id=question,
+            judge_id=user_id
         )
 
-    if any(k in lower for k in ["assigned", "my event", "my events", "events i judge"]):
-        if context.get("user_id"):
-            tools_context["assigned_events"] = get_judge_assigned_events(context.get("user_id"))
+    # 2. Score recording / evaluation intent
+    elif any(k in lower for k in ["calculate", "score", "scores", "marks", "grade", "points", "evaluate", "give"]) and re.search(r'\d+', question):
+        ev_name, team_name, scores_dict = parse_score_inputs(question)
+        tools_context["score_calculation"] = calculate_and_record_scores(
+            event_name_or_id=ev_name or question,
+            team_or_reg_identifier=team_name or "Participant",
+            scores_dict=scores_dict,
+            judge_id=user_id or 7,
+            remarks=f"Evaluated by {context.get('user_name') or 'Judge'}"
+        )
+
+    # 3. Participants / Roster to evaluate
+    elif any(k in lower for k in ["participants", "participant", "roster", "registered", "submissions", "submission", "who can i judge", "who to evaluate", "competitors", "teams to judge"]):
+        tools_context["participants_list"] = get_event_participants_for_judging(
+            event_name_or_id=question,
+            judge_id=user_id
+        )
+
+    # 4. Scorecard lookup
+    elif any(k in lower for k in ["scorecard", "what did", "scores of", "score of", "marks of", "how much did", "view score"]):
+        tools_context["scorecard"] = get_participant_scorecard(
+            participant_or_reg=question,
+            event_name_or_id=question,
+            judge_id=user_id
+        )
+
+    # 5. Assigned events
+    elif any(k in lower for k in ["assigned", "my event", "my events", "events i judge", "what do i judge", "my panels"]):
+        tools_context["assigned_events"] = get_judge_assigned_events(user_id or 7)
+
+    # 6. Rubrics / Criteria
+    elif any(k in lower for k in ["criteria", "rubric", "weightage", "marking scheme", "how is"]):
+        tools_context["rubric_info"] = get_event_criteria_and_rubrics(event_name_or_id=question)
+
+    # 7. Add Criteria
+    elif any(k in lower for k in ["add criteria", "create criteria", "new criteria"]):
+        m_crit = re.search(r'(?:criteria|criterion)\s+[\'"]?([a-zA-Z\s]+)[\'"]?', question, re.IGNORECASE)
+        c_name = m_crit.group(1).strip() if m_crit else "Code Quality"
+        m_pts = re.search(r'(\d+(?:\.\d+)?)\s*(?:marks?|points?|pts)?', question)
+        pts = float(m_pts.group(1)) if m_pts else 25.0
+        tools_context["add_criteria_result"] = add_event_scoring_criteria(
+            event_name_or_id=question,
+            criteria_name=c_name,
+            max_score=pts,
+            judge_id=user_id
+        )
+
+    # 8. Publish results
+    elif any(k in lower for k in ["publish results", "finalize results", "publish rankings", "announce winners"]):
+        tools_context["publish_result"] = publish_or_finalize_event_results(
+            event_name_or_id=question,
+            user_id=user_id
+        )
 
     state["tool_outputs"] = tools_context
 

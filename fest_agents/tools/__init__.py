@@ -16,7 +16,14 @@ from .judging_tools import (
     calculate_rankings,
     get_live_event_results,
     calculate_and_record_scores,
-    get_judge_assigned_events
+    get_judge_assigned_events,
+    resolve_event_for_judging,
+    get_event_maximum_score_and_standings,
+    get_event_participants_for_judging,
+    get_participant_scorecard,
+    get_event_criteria_and_rubrics,
+    add_event_scoring_criteria,
+    publish_or_finalize_event_results
 )
 from .analytics_tools import get_fest_analytics, get_sponsor_reports
 from .cert_tools import generate_certificate_text, draft_announcement
@@ -42,6 +49,13 @@ __all__ = [
     "get_live_event_results",
     "calculate_and_record_scores",
     "get_judge_assigned_events",
+    "resolve_event_for_judging",
+    "get_event_maximum_score_and_standings",
+    "get_event_participants_for_judging",
+    "get_participant_scorecard",
+    "get_event_criteria_and_rubrics",
+    "add_event_scoring_criteria",
+    "publish_or_finalize_event_results",
     "get_fest_analytics",
     "get_sponsor_reports",
     "generate_certificate_text",
