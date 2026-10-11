@@ -7,10 +7,12 @@ from pydantic import BaseModel, Field
 from app.core.dependencies import get_current_user_optional, get_db
 from app.models.user import User
 
-# Ensure workspace root is in sys.path to load fest_agents module
+# Ensure workspace root and backend directory are in sys.path
 workspace_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
-if workspace_root not in sys.path:
-    sys.path.insert(0, workspace_root)
+backend_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+for p in [workspace_root, backend_root]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 try:
     from fest_agents.graph import app as agents_app

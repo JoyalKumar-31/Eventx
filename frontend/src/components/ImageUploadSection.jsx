@@ -1,5 +1,6 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { UploadCloud, Image as ImageIcon, X, RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
+import { resolveImageUrl } from "../utils/imageUrl";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE_MB = 10;
@@ -12,10 +13,16 @@ export const ImageUploadSection = ({
   uploadStatus = "idle", // 'idle' | 'uploading' | 'uploaded' | 'error'
   errorMessage = null,
 }) => {
-  const [previewUrl, setPreviewUrl] = useState(currentImageUrl);
+  const [previewUrl, setPreviewUrl] = useState(resolveImageUrl(currentImageUrl));
   const [dragActive, setDragActive] = useState(false);
   const [validationError, setValidationError] = useState(null);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (currentImageUrl && !previewUrl?.startsWith("blob:")) {
+      setPreviewUrl(resolveImageUrl(currentImageUrl));
+    }
+  }, [currentImageUrl]);
 
   const validateAndSetFile = (file) => {
     setValidationError(null);

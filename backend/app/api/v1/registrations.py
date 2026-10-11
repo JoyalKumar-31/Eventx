@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_current_user, require_role
-from app.models.enums import UserRole, EventStatus, RegistrationStatus, TeamStatus
+from app.models.enums import UserRole, EventStatus, RegistrationStatus, TeamStatus, PaymentStatus
 from app.models.event import Event
 from app.models.registration import Registration, Team, TeamMember
 from app.models.attendance import Attendance
@@ -241,6 +241,7 @@ def get_qr_entry_pass(
     if current_user.role not in [UserRole.ADMIN, UserRole.EVENT_COORDINATOR] and reg.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized to view this entry pass")
 
+<<<<<<< HEAD
     # Guard: Paid events require completed payment before QR ticket pass can be generated/viewed
     fee = float(reg.event.registration_fee or 0) if reg.event else 0.0
     has_paid = any(p.status.value == "SUCCESS" for p in reg.payments) if reg.payments else False
@@ -251,6 +252,17 @@ def get_qr_entry_pass(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=f"Payment required! Entry pass for '{reg.event.title}' is locked until the registration fee of ₹{fee:.0f} is cleared."
         )
+=======
+    # Enforce payment check: if event has registration_fee > 0 and registration has not completed payment
+    fee = float(reg.event.registration_fee or 0) if reg.event else 0.0
+    if fee > 0:
+        has_success_payment = any(p.status == PaymentStatus.SUCCESS for p in reg.payments)
+        if reg.status not in [RegistrationStatus.CONFIRMED, RegistrationStatus.ATTENDED] or not has_success_payment:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Payment required to view entry pass"
+            )
+>>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
 
     payload_str = build_qr_pass_payload(reg.registration_number, reg.qr_code_hash, reg.event_id)
     qr_b64 = generate_qr_image_base64(payload_str)

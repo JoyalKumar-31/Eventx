@@ -234,6 +234,7 @@ def register_student_for_event(
 
             if existing_reg:
                 venue_name = matched_event.venue.name if matched_event.venue else "Campus Arena"
+<<<<<<< HEAD
                 is_free = (float(matched_event.registration_fee or 0) == 0.0)
                 has_paid = any(p.status.value == "SUCCESS" for p in existing_reg.payments) if existing_reg.payments else False
                 is_cleared = is_free or (existing_reg.status == RegistrationStatus.CONFIRMED and has_paid)
@@ -269,6 +270,52 @@ def register_student_for_event(
                         + pass_info
                     )
                 }
+=======
+                fee_val = float(matched_event.registration_fee or 0)
+                has_completed_payment = (
+                    fee_val == 0
+                    or existing_reg.status in [RegistrationStatus.CONFIRMED, RegistrationStatus.ATTENDED]
+                    or any(p.status.value == "SUCCESS" for p in existing_reg.payments)
+                )
+                if not has_completed_payment:
+                    return {
+                        "success": True,
+                        "already_registered": True,
+                        "registration_number": existing_reg.registration_number,
+                        "event_title": matched_event.title,
+                        "status": "PENDING_PAYMENT",
+                        "qr_pass": "🔒 Locked (Payment Pending)",
+                        "venue": venue_name,
+                        "message": (
+                            f"You have already initiated registration for **{matched_event.title}**!\n\n"
+                            f"• **Registration Number**: `{existing_reg.registration_number}`\n"
+                            f"• **Status**: `PENDING_PAYMENT`\n"
+                            f"• **Registration Fee**: ₹{fee_val:.0f}\n"
+                            f"• **Pass Code**: 🔒 *Locked (Payment Pending)*\n"
+                            f"• **Venue**: {venue_name}\n\n"
+                            f"⚠️ **Action Required**: Registration fee payment is pending. Your digital QR pass remains locked until payment is cleared. "
+                            f"Please navigate to [My Registrations](/student/registrations) to pay ₹{fee_val:.0f} and unlock your entry pass."
+                        )
+                    }
+                else:
+                    return {
+                        "success": True,
+                        "already_registered": True,
+                        "registration_number": existing_reg.registration_number,
+                        "event_title": matched_event.title,
+                        "status": existing_reg.status.value,
+                        "qr_pass": existing_reg.qr_code_hash,
+                        "venue": venue_name,
+                        "message": (
+                            f"You are already registered for **{matched_event.title}**!\n\n"
+                            f"• **Registration Number**: `{existing_reg.registration_number}`\n"
+                            f"• **Status**: `{existing_reg.status.value}`\n"
+                            f"• **Pass Code**: `{existing_reg.qr_code_hash}`\n"
+                            f"• **Venue**: {venue_name}\n\n"
+                            f"View your digital QR pass in your [Student Passes Portal](/student/passes)."
+                        )
+                    }
+>>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
 
             # 4. Handle Team creation if team event
             created_team = None
@@ -296,8 +343,13 @@ def register_student_for_event(
             # 5. Create Registration Record
             reg_num = f"REG-{matched_event.id:03d}-{uuid.uuid4().hex[:6].upper()}"
             qr_hash = f"PASS-{hashlib.sha256(f'{reg_num}:{matched_event.id}:{user.id}:{uuid.uuid4()}'.encode()).hexdigest()[:12].upper()}"
+<<<<<<< HEAD
             is_free = (float(matched_event.registration_fee or 0) == 0.0)
             status_val = RegistrationStatus.CONFIRMED if is_free else RegistrationStatus.PENDING_PAYMENT
+=======
+            is_paid_event = matched_event.registration_fee > 0
+            status_val = RegistrationStatus.PENDING_PAYMENT if is_paid_event else RegistrationStatus.CONFIRMED
+>>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
 
             new_reg = Registration(
                 registration_number=reg_num,
@@ -326,7 +378,39 @@ def register_student_for_event(
 
             start_str = matched_event.start_time.strftime("%d %b, %I:%M %p") if matched_event.start_time else "TBA"
             venue_str = matched_event.venue.name if matched_event.venue else "Campus Arena"
-            fee_str = f"₹{float(matched_event.registration_fee):.0f}" if matched_event.registration_fee > 0 else "Free Entry"
+            fee_num = float(matched_event.registration_fee or 0)
+            fee_str = f"₹{fee_num:.0f}" if is_paid_event else "Free Entry"
+
+            if is_paid_event:
+                ret_qr_pass = "🔒 Locked (Payment Pending)"
+                msg = (
+                    f"⏳ **Registration Initiated for {matched_event.title} (Payment Required)**\n\n"
+                    f"• **Registration ID**: `{reg_num}`\n"
+                    f"• **Participant**: {user.full_name}\n"
+                    f"• **Event Category**: {matched_event.category.name if matched_event.category else 'General'}\n"
+                    f"• **Date & Time**: {start_str}\n"
+                    f"• **Venue**: {venue_str}\n"
+                    f"• **Registration Fee**: {fee_str}\n"
+                    f"• **Status**: `PENDING_PAYMENT`\n"
+                    f"• **Digital Pass**: 🔒 *Locked (Pay to View)*\n"
+                    + (f"• **Team Name**: {created_team.name} (Share Invite Code: `{created_team.invite_code}`)\n" if created_team else "")
+                    + f"\n⚠️ **Action Required**: Your registration is pending fee payment. The digital QR entry pass will remain locked until payment is cleared. "
+                    f"Please visit [My Registrations](/student/registrations) to pay **{fee_str}** and unlock your pass."
+                )
+            else:
+                ret_qr_pass = qr_hash
+                msg = (
+                    f"🎉 **Registration Confirmed for {matched_event.title}!**\n\n"
+                    f"• **Registration ID**: `{reg_num}`\n"
+                    f"• **Participant**: {user.full_name}\n"
+                    f"• **Event Category**: {matched_event.category.name if matched_event.category else 'General'}\n"
+                    f"• **Date & Time**: {start_str}\n"
+                    f"• **Venue**: {venue_str}\n"
+                    f"• **Fee**: Free Entry (Status: `CONFIRMED`)\n"
+                    f"• **Digital Pass Key**: `{qr_hash}`\n"
+                    + (f"• **Team Name**: {created_team.name} (Share Invite Code: `{created_team.invite_code}`)\n" if created_team else "")
+                    + f"\nYour QR entry pass has been generated! You can access it anytime in your [Student Passes](/student/passes) or [Registrations](/student/registrations)."
+                )
 
             if is_free:
                 msg = (
@@ -371,7 +455,11 @@ def register_student_for_event(
                 "fee": fee_str,
                 "is_paid": is_free,
                 "status": status_val.value,
+<<<<<<< HEAD
                 "qr_pass": pass_key_output,
+=======
+                "qr_pass": ret_qr_pass,
+>>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
                 "team_name": created_team.name if created_team else "Individual",
                 "invite_code": created_team.invite_code if created_team else None,
                 "message": msg
@@ -412,6 +500,7 @@ def get_user_registrations(user_id: Optional[int] = None, user_email: Optional[s
             for r in regs:
                 start_str = r.event.start_time.strftime("%d %b, %I:%M %p") if (r.event and r.event.start_time) else "TBA"
                 venue_str = r.event.venue.name if (r.event and r.event.venue) else "Campus Arena"
+<<<<<<< HEAD
                 fee = float(r.event.registration_fee or 0) if r.event else 0.0
                 has_paid = any(p.status.value == "SUCCESS" for p in r.payments) if r.payments else False
                 is_cleared = (fee == 0.0) or (r.status == RegistrationStatus.CONFIRMED and has_paid)
@@ -423,10 +512,26 @@ def get_user_registrations(user_id: Optional[int] = None, user_email: Optional[s
                     "is_paid": is_cleared,
                     "fee": fee,
                     "qr_pass": r.qr_code_hash if is_cleared else "🔒 Locked (Payment Pending)",
+=======
+                fee_val = float(r.event.registration_fee or 0) if r.event else 0.0
+                has_paid = (
+                    fee_val == 0
+                    or r.status.value in ["CONFIRMED", "ATTENDED"]
+                    or any(p.status.value == "SUCCESS" for p in r.payments)
+                )
+                qr_display = r.qr_code_hash if has_paid else "🔒 Locked (Payment Pending)"
+                output.append({
+                    "registration_number": r.registration_number,
+                    "event_title": r.event.title if r.event else "N/A",
+                    "status": r.status.value,
+                    "qr_pass": qr_display,
+>>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
                     "venue": venue_str,
                     "time": start_str,
                     "team_name": r.team.name if r.team else "Individual",
-                    "registered_at": r.registered_at.strftime("%d %b %Y") if r.registered_at else "N/A"
+                    "registered_at": r.registered_at.strftime("%d %b %Y") if r.registered_at else "N/A",
+                    "fee": fee_val,
+                    "is_paid": has_paid
                 })
             return output
         finally:

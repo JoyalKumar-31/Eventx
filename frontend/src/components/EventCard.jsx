@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Calendar, MapPin, Users, Ticket, ArrowUpRight } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
+import { resolveImageUrl } from "../utils/imageUrl";
 
 export const EventCard = ({
   event,
@@ -26,7 +27,8 @@ export const EventCard = ({
   } = event;
 
   // Determine cover image URL from backend API response
-  const imageUrl = cover_image?.url || banner_image_url || null;
+  const rawImageUrl = cover_image?.url || banner_image_url || null;
+  const imageUrl = resolveImageUrl(rawImageUrl);
 
   // Formatted date
   const dateStr = start_time

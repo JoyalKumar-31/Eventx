@@ -18,11 +18,19 @@ export default function StudentPassPage() {
     try {
       setLoading(true);
       const data = await registrationApi.getMyRegistrations();
+<<<<<<< HEAD
       // Only keep confirmed or paid registrations that have a pass
       const valid = (data || []).filter((r) => {
         const fee = Number(r.registration_fee ?? r.event?.registration_fee ?? 0);
         const isPaid = fee === 0 || r.payment_status === "PAID" || r.payment_status === "SUCCESS";
         return isPaid && (r.status === "CONFIRMED" || fee === 0);
+=======
+      // Only keep confirmed or paid registrations where payment has cleared
+      const valid = (data || []).filter((r) => {
+        const fee = Number(r.registration_fee ?? r.event?.registration_fee ?? 0);
+        const isPaid = fee === 0 || r.payment_status === "PAID" || r.payment_status === "SUCCESS";
+        return isPaid && (r.status === "CONFIRMED" || r.status === "ATTENDED");
+>>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
       });
       setRegistrations(valid);
     } catch (err) {

@@ -6,6 +6,7 @@ import { registrationApi } from "../../api/registrationApi";
 import { useAuth } from "../../auth/AuthContext";
 import { StatusBadge } from "../../components/StatusBadge";
 import { PaymentModal } from "../../components/PaymentModal";
+import { resolveImageUrl } from "../../utils/imageUrl";
 
 export const EventDetailPage = () => {
   const { id } = useParams();
@@ -91,7 +92,7 @@ export const EventDetailPage = () => {
     );
   }
 
-  const coverUrl = event.cover_image?.url || event.banner_image_url || null;
+  const coverUrl = resolveImageUrl(event.cover_image?.url || event.banner_image_url || null);
   const spotsLeft = Math.max(0, event.max_participants - event.current_participants);
 
   return (

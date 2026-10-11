@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
+<<<<<<< HEAD
 import { X, Download, Printer, ShieldCheck, MapPin, Calendar, Clock, User, Lock } from "lucide-react";
+=======
+import { Link } from "react-router-dom";
+import { X, Download, Printer, ShieldCheck, MapPin, Calendar, Clock, User, Lock, AlertCircle } from "lucide-react";
+>>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
 import { registrationApi } from "../api/registrationApi";
 
 export const QRPassModal = ({
@@ -10,20 +15,43 @@ export const QRPassModal = ({
 }) => {
   const [passData, setPassData] = useState(initialPassData);
   const [loading, setLoading] = useState(false);
+<<<<<<< HEAD
   const [errorMsg, setErrorMsg] = useState(null);
+=======
+  const [error, setError] = useState(null);
+  const [isPaymentRequired, setIsPaymentRequired] = useState(false);
+>>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
   const passRef = useRef(null);
 
   useEffect(() => {
     if (registrationId && !initialPassData) {
       setLoading(true);
+<<<<<<< HEAD
       setErrorMsg(null);
+=======
+      setError(null);
+      setIsPaymentRequired(false);
+>>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
       registrationApi
         .getQREntryPass(registrationId)
         .then((res) => setPassData(res))
         .catch((err) => {
+<<<<<<< HEAD
           const detail = err.response?.data?.detail;
           const msg = typeof detail === "object" ? detail.message : (detail || "Payment required to view entry pass.");
           setErrorMsg(msg);
+=======
+          console.error("Failed to load pass", err);
+          const statusCode = err.response?.status;
+          const detail = err.response?.data?.detail;
+          const msg = typeof detail === "string" ? detail : (detail?.message || "Failed to load entry pass");
+          if (statusCode === 402 || msg.toLowerCase().includes("payment required")) {
+            setIsPaymentRequired(true);
+            setError(msg);
+          } else {
+            setError(msg);
+          }
+>>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
         })
         .finally(() => setLoading(false));
     } else if (initialPassData) {
@@ -91,6 +119,32 @@ export const QRPassModal = ({
             </div>
             <h4 className="text-base font-bold text-white">Payment Required</h4>
             <p className="text-xs text-amber-300/90 max-w-xs mx-auto leading-relaxed">{errorMsg}</p>
+          </div>
+        ) : isPaymentRequired ? (
+          <div className="py-10 text-center space-y-4">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-500/20">
+              <Lock className="w-7 h-7" />
+            </div>
+            <div>
+              <h4 className="text-lg font-bold text-white">Entry Pass Locked</h4>
+              <p className="text-xs text-amber-300/90 mt-1.5 max-w-xs mx-auto leading-relaxed">
+                Payment is required before this digital gate pass can be revealed or downloaded.
+              </p>
+            </div>
+            <div className="pt-2">
+              <Link
+                to="/student/registrations"
+                onClick={onClose}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-all shadow-lg shadow-amber-500/20"
+              >
+                Go to My Registrations to Pay
+              </Link>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="py-12 text-center space-y-3">
+            <AlertCircle className="w-8 h-8 text-rose-400 mx-auto" />
+            <p className="text-xs text-rose-300">{error}</p>
           </div>
         ) : !passData ? (
           <div className="py-12 text-center text-xs text-slate-400">
