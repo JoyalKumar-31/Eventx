@@ -92,18 +92,22 @@ export default function CoordinatorAttendancePage() {
     } catch (err) {
       console.error("Manual scan error", err);
       const status = err.response?.status;
-      const detail = err.response?.data?.detail || "Scan verification failed.";
+      const errDetail = err.response?.data?.detail;
+      const messageText =
+        typeof errDetail === "string"
+          ? errDetail
+          : (errDetail?.message || err.response?.data?.message || "Scan verification failed.");
       if (status === 409) {
         setScanResult({
           type: "warning",
           title: "DUPLICATE ENTRY DETECTED",
-          message: detail,
+          message: messageText,
         });
       } else {
         setScanResult({
           type: "error",
           title: "ENTRY DENIED",
-          message: detail,
+          message: messageText,
         });
       }
     } finally {
@@ -314,11 +318,12 @@ export default function CoordinatorAttendancePage() {
       {showScannerModal && (
         <QRScannerModal
           isOpen={showScannerModal}
-          eventId={Number(selectedEventId)}
+          eventId={selectedEventId ? Number(selectedEventId) : null}
           onClose={() => setShowScannerModal(false)}
-          onScanSuccess={() => {
-            if (selectedEventId) {
-              loadAttendanceData(Number(selectedEventId));
+          onScanSuccess={(res) => {
+            const targetId = (res && res.event_id) || (selectedEventId ? Number(selectedEventId) : null);
+            if (targetId) {
+              loadAttendanceData(targetId);
             }
           }}
         />

@@ -64,3 +64,30 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #3e3e4a;
 }
+
+/* QR Scanner Container & Video styling to prevent dual/split preview */
+#qr-reader-container {
+  position: relative !important;
+  width: 100% !important;
+  display: block !important;
+  overflow: hidden !important;
+  border-radius: 1rem !important;
+  background-color: #000000 !important;
+}
+
+#qr-reader-container video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+  border-radius: 1rem !important;
+  margin: 0 auto !important;
+}
+
+#qr-reader-container canvas {
+  display: none !important;
+}
+
+#qr-reader-container img {
+  display: none !important;
+}

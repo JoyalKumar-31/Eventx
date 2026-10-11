@@ -247,6 +247,7 @@ export default function CoordinatorParticipantsPage() {
                       const hasAttended =
                         reg.entry_status === "VALID" ||
                         reg.entry_status === "ENTERED" ||
+                        reg.status === "ATTENDED" ||
                         (reg.attendance_records && reg.attendance_records.length > 0) ||
                         (reg.attendances && reg.attendances.length > 0);
 

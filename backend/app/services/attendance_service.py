@@ -27,23 +27,36 @@ def verify_and_record_attendance(
     """
     token = qr_payload.strip()
     reg_number = None
+    pass_token = token
 
     # Handle JSON payload or raw token/number
-    if token.startswith("{"):
+    if "{" in token and "}" in token:
         try:
-            data = json.loads(token)
-            token = data.get("token") or token
-            reg_number = data.get("reg_num")
+            start_idx = token.find("{")
+            end_idx = token.rfind("}") + 1
+            data = json.loads(token[start_idx:end_idx])
+            pass_token = str(data.get("token") or token).strip()
+            reg_number = str(data.get("reg_num") or "").strip() or None
         except Exception:
             pass
 
     query = db.query(Registration)
-    if reg_number:
-        query = query.filter(Registration.registration_number == reg_number)
+    if reg_number and pass_token:
+        registration = query.filter(
+            (Registration.registration_number == reg_number) |
+            (Registration.qr_code_hash == pass_token)
+        ).first()
+    elif reg_number:
+        registration = query.filter(Registration.registration_number == reg_number).first()
     else:
-        query = query.filter((Registration.qr_code_hash == token) | (Registration.registration_number == token))
+        registration = query.filter(
+            (Registration.qr_code_hash == token) |
+            (Registration.registration_number == token)
+        ).first()
 
-    registration = query.first()
+    if not registration and token.isdigit():
+        registration = db.query(Registration).filter(Registration.id == int(token)).first()
+
     if not registration:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -51,10 +64,11 @@ def verify_and_record_attendance(
         )
 
     # Check event match if coordinator is scanning for a specific event
-    if expected_event_id and registration.event_id != expected_event_id:
+    if expected_event_id and expected_event_id > 0 and registration.event_id != expected_event_id:
+        event_name = registration.event.title if registration.event else f"Event #{registration.event_id}"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"success": False, "message": f"Pass is for a different event (Event ID {registration.event_id})", "error_code": "EVENT_MISMATCH"}
+            detail={"success": False, "message": f"Pass is for a different event: '{event_name}'", "error_code": "EVENT_MISMATCH"}
         )
 
     # Check if payment is confirmed

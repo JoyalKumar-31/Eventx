@@ -44,7 +44,7 @@ def format_att_response(att: Attendance) -> AttendanceResponse:
 def scan_qr_entry_pass(
     req: QRScanRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
+    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN, UserRole.JUDGE))
 ):
     """
     Validates QR entry ticket for participant.
@@ -66,7 +66,7 @@ def scan_qr_entry_pass(
 def get_event_attendance(
     event_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
+    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN, UserRole.JUDGE))
 ):
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
@@ -80,7 +80,7 @@ def get_event_attendance(
 def get_event_attendance_stats(
     event_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
+    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN, UserRole.JUDGE))
 ):
     total_reg = db.query(Registration).filter(Registration.event_id == event_id).count()
     total_att = db.query(Attendance).filter(

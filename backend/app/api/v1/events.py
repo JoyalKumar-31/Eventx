@@ -206,11 +206,14 @@ def list_events(
 @router.get("/coordinator/my-events", response_model=List[EventListResponse])
 def list_my_coordinated_events(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
+    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN, UserRole.JUDGE))
 ):
     query = db.query(Event)
-    if current_user.role != UserRole.ADMIN:
+    if current_user.role == UserRole.EVENT_COORDINATOR:
         query = query.filter(Event.coordinator_id == current_user.id)
+    elif current_user.role == UserRole.JUDGE:
+        from app.models.judging import JudgeAssignment
+        query = query.join(JudgeAssignment, Event.id == JudgeAssignment.event_id).filter(JudgeAssignment.judge_id == current_user.id)
     events = query.order_by(Event.created_at.desc()).all()
     return [format_event_response(e) for e in events]
 
