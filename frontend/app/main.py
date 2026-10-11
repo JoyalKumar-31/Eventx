@@ -1,0 +1,111 @@
+# EventX Main FastAPI Entrypoint
+import os
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from app.core.config import settings
+from app.api.v1 import (
+    auth,
+    users,
+    events,
+    registrations,
+    teams,
+    payments,
+    attendance,
+    judges,
+    scores,
+    results,
+    certificates,
+    notifications,
+    announcements,
+    admin,
+    public,
+    agents,
+    invitations
+)
+
+app = FastAPI(
+    title="College Fest Management Application System",
+    description="Production-Ready Full-Stack Enterprise Platform for College Fest Management",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/api/openapi.json",
+    openapi_tags=[
+        {"name": "Authentication", "description": "User registration, login, and token management"},
+        {"name": "Users", "description": "User profiles, roles, and administrative directory"},
+        {"name": "Events", "description": "Event management, rules, rounds, venues, and media uploads"},
+        {"name": "Registrations", "description": "Event enrollments and digital QR entry pass generation"},
+        {"name": "Teams", "description": "Team creation, invitation codes, and member management"},
+        {"name": "Payments", "description": "Payment orders, verification, and invoice tracking"},
+        {"name": "Attendance", "description": "QR entry scanning, check-in validation, and duplicate prevention"},
+        {"name": "Judging", "description": "Judge assignments, scoring criteria, and score submission"},
+        {"name": "Results", "description": "Standings calculation and published results"},
+        {"name": "Certificates", "description": "Dynamic PDF certificates and public verification"},
+        {"name": "Notifications", "description": "In-app notifications and alerts"},
+        {"name": "Announcements", "description": "Fest announcements and targeted broadcasts"},
+        {"name": "Admin", "description": "System analytics, audit trails, and revenue metrics"},
+        {"name": "Public", "description": "Unauthenticated public schedules, stats, and venues"},
+        {"name": "Fest AI Agents", "description": "LangGraph multi-agent copilot for fest attendees, coordinators, and judges"},
+    ]
+)
+
+# CORS Middleware
+origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else [settings.CORS_ORIGINS]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins if origins else ["http://localhost:5173", "http://localhost:3000"],
+    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Static file serving for uploaded media
+storage_root = os.path.abspath(settings.EVENT_MEDIA_PATH.split("/")[0] if "/" in settings.EVENT_MEDIA_PATH else "uploads")
+os.makedirs(storage_root, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=storage_root), name="uploads")
+
+
+# Centralized error response handler for consistent envelopes
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request: Request, exc: HTTPException):
+    if isinstance(exc.detail, dict):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=exc.detail
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "message": str(exc.detail),
+            "error_code": "ERROR"
+        }
+    )
+
+
+# Include API Routers under /api and bare paths for multi-environment proxy compatibility
+all_routers = [
+    auth.router, users.router, events.router, registrations.router,
+    teams.router, payments.router, attendance.router, judges.router,
+    scores.router, results.router, certificates.router, notifications.router,
+    announcements.router, admin.router, public.router, agents.router,
+    invitations.router
+]
+for r in all_routers:
+    app.include_router(r, prefix="/api")
+    app.include_router(r)
+
+
+@app.get("/", tags=["Health"])
+@app.get("/health", tags=["Health"])
+@app.get("/api/health", tags=["Health"])
+def health_check():
+    return {
+        "status": "healthy",
+        "service": "College Fest Management Platform API",
+        "environment": "production-ready"
+    }
