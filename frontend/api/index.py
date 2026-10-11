@@ -1,5 +1,6 @@
 import os
 import sys
+import traceback
 from pathlib import Path
 
 # Add frontend directory and root to sys.path so app and fest_agents can be imported
@@ -18,6 +19,25 @@ if not current_db or "localhost" in current_db or "127.0.0.1" in current_db:
 
 os.environ["VERCEL"] = "1"
 
-from app.main import app
+try:
+    from app.main import app
+except Exception as exc:
+    error_trace = traceback.format_exc()
+    from fastapi import FastAPI
+    from fastapi.responses import JSONResponse
+    app = FastAPI()
 
-# Export app for Vercel Serverless Function
+    @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
+    def debug_error(path: str):
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": "Failed to initialize application on Vercel",
+                "exception": str(exc),
+                "traceback": error_trace.splitlines(),
+                "sys_path": sys.path,
+                "cwd": os.getcwd(),
+                "files_in_cwd": os.listdir(os.getcwd()) if os.path.exists(os.getcwd()) else []
+            }
+        )
