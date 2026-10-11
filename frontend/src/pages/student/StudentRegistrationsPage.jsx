@@ -127,10 +127,7 @@ export default function StudentRegistrationsPage() {
           {filtered.map((reg) => {
             const fee = Number(reg.registration_fee ?? reg.event?.registration_fee ?? 0);
             const isPaid = fee === 0 || reg.payment_status === "PAID" || reg.payment_status === "SUCCESS";
-<<<<<<< HEAD
-=======
             const displayStatus = isPaid ? (reg.status || "CONFIRMED") : "PENDING_PAYMENT";
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
             const eventTitle = reg.event_title || reg.event?.title || `Event #${reg.event_id}`;
             const teamName = reg.team_name || reg.team?.name;
 
@@ -142,11 +139,7 @@ export default function StudentRegistrationsPage() {
                 {/* Event info */}
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-<<<<<<< HEAD
-                    <StatusBadge status={isPaid ? reg.status : "PENDING_PAYMENT"} />
-=======
                     <StatusBadge status={displayStatus} />
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
                     <span
                       className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider ${
                         isPaid
@@ -208,27 +201,6 @@ export default function StudentRegistrationsPage() {
                       <QrCode className="w-4 h-4" /> View Entry Pass
                     </button>
                   )}
-
-<<<<<<< HEAD
-                  {isPaid ? (
-                    <button
-                      onClick={() => setPassRegId(reg.id)}
-                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-indigo-600/20"
-                    >
-                      <QrCode className="w-4 h-4" /> View Entry Pass
-                    </button>
-                  ) : (
-                    <div
-                      className="px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 font-medium text-xs flex items-center gap-1.5 opacity-90 cursor-not-allowed select-none"
-                      title="Entry pass and QR code will unlock once payment is cleared"
-                    >
-                      <Lock className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Pass Locked (Pay to View)</span>
-                    </div>
-                  )}
-
-=======
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
                   <Link
                     to={`/events/${reg.event_id}`}
                     className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all text-xs"

@@ -59,20 +59,12 @@ export default function StudentDashboard() {
   const pendingPayments = registrations.filter((r) => {
     const fee = Number(r.registration_fee ?? r.event?.registration_fee ?? 0);
     const isPaid = fee === 0 || r.payment_status === "PAID" || r.payment_status === "SUCCESS";
-<<<<<<< HEAD
     return !isPaid && fee > 0;
-=======
-    return !isPaid;
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
   });
   const confirmedRegistrations = registrations.filter((r) => {
     const fee = Number(r.registration_fee ?? r.event?.registration_fee ?? 0);
     const isPaid = fee === 0 || r.payment_status === "PAID" || r.payment_status === "SUCCESS";
-<<<<<<< HEAD
-    return isPaid && (r.status === "CONFIRMED" || fee === 0);
-=======
-    return isPaid && (r.status === "CONFIRMED" || r.status === "ATTENDED");
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
+    return isPaid && (r.status === "CONFIRMED" || r.status === "ATTENDED" || fee === 0);
   });
 
   return (

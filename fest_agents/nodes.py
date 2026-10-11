@@ -357,30 +357,19 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
             cards = []
             has_pending_payment = False
             for r in regs:
-<<<<<<< HEAD
-                pass_str = r.get("qr_pass", "TBA")
-                if "Locked" in str(pass_str):
-                    pass_line = "  - Digital QR Pass: 🔒 Locked (Complete fee payment in [My Registrations](/student/registrations) to unlock)"
-                else:
-                    pass_line = f"  - Digital QR Pass: `{pass_str}`"
-=======
                 is_locked = "Locked" in str(r.get("qr_pass", "")) or r.get("status") == "PENDING_PAYMENT"
                 if is_locked:
                     has_pending_payment = True
-                    pass_str = "🔒 *Locked (Payment Pending)*"
+                    pass_line = "  - Digital QR Pass: 🔒 Locked (Complete fee payment in [My Registrations](/student/registrations) to unlock)"
                 else:
-                    pass_str = f"`{r['qr_pass']}`"
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
+                    pass_str = r.get("qr_pass", "TBA")
+                    pass_line = f"  - Digital QR Pass: `{pass_str}`"
 
                 cards.append(
                     f"• **{r['event_title']}**\n"
                     f"  - Reg ID: `{r['registration_number']}` | Status: `{r['status']}`\n"
                     f"  - Schedule: {r['time']} at {r['venue']}\n"
-<<<<<<< HEAD
                     f"{pass_line}"
-=======
-                    f"  - Digital QR Pass: {pass_str}"
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
                 )
 
             payment_notice = (
@@ -393,12 +382,8 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
                 f"### 🎟️ Your EventX Registrations & Passes\n\n"
                 f"{greeting}! Here are your festival enrollments from our database:\n\n"
                 + "\n\n".join(cards)
-<<<<<<< HEAD
-                + f"\n\nAccess your digital barcoded gate passes anytime in [Student Passes](/student/passes) or settle pending dues in [My Registrations](/student/registrations)."
-=======
                 + payment_notice
-                + f"\n\nAccess your digital barcoded gate passes anytime in [Student Passes](/student/passes)."
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
+                + f"\n\nAccess your digital barcoded gate passes anytime in [Student Passes](/student/passes) or settle pending dues in [My Registrations](/student/registrations)."
             )
 
         # ACTION 3: Check-in / Gate Scan

@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-<<<<<<< HEAD
-import { X, Download, Printer, ShieldCheck, MapPin, Calendar, Clock, User, Lock } from "lucide-react";
-=======
 import { Link } from "react-router-dom";
 import { X, Download, Printer, ShieldCheck, MapPin, Calendar, Clock, User, Lock, AlertCircle } from "lucide-react";
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
 import { registrationApi } from "../api/registrationApi";
 
 export const QRPassModal = ({
@@ -15,32 +11,19 @@ export const QRPassModal = ({
 }) => {
   const [passData, setPassData] = useState(initialPassData);
   const [loading, setLoading] = useState(false);
-<<<<<<< HEAD
-  const [errorMsg, setErrorMsg] = useState(null);
-=======
   const [error, setError] = useState(null);
   const [isPaymentRequired, setIsPaymentRequired] = useState(false);
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
   const passRef = useRef(null);
 
   useEffect(() => {
     if (registrationId && !initialPassData) {
       setLoading(true);
-<<<<<<< HEAD
-      setErrorMsg(null);
-=======
       setError(null);
       setIsPaymentRequired(false);
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
       registrationApi
         .getQREntryPass(registrationId)
         .then((res) => setPassData(res))
         .catch((err) => {
-<<<<<<< HEAD
-          const detail = err.response?.data?.detail;
-          const msg = typeof detail === "object" ? detail.message : (detail || "Payment required to view entry pass.");
-          setErrorMsg(msg);
-=======
           console.error("Failed to load pass", err);
           const statusCode = err.response?.status;
           const detail = err.response?.data?.detail;
@@ -51,7 +34,6 @@ export const QRPassModal = ({
           } else {
             setError(msg);
           }
->>>>>>> 23cf847 (feat(deploy): production configuration for Render, Vercel, and Hosted MySQL)
         })
         .finally(() => setLoading(false));
     } else if (initialPassData) {
@@ -111,14 +93,6 @@ export const QRPassModal = ({
           <div className="py-16 text-center space-y-3">
             <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
             <p className="text-xs text-slate-400">Loading Cryptographic Entry Pass...</p>
-          </div>
-        ) : errorMsg ? (
-          <div className="py-12 text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mx-auto">
-              <Lock className="w-6 h-6" />
-            </div>
-            <h4 className="text-base font-bold text-white">Payment Required</h4>
-            <p className="text-xs text-amber-300/90 max-w-xs mx-auto leading-relaxed">{errorMsg}</p>
           </div>
         ) : isPaymentRequired ? (
           <div className="py-10 text-center space-y-4">
