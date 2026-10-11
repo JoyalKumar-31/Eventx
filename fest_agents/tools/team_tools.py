@@ -327,10 +327,11 @@ def register_student_for_event(
             start_str = matched_event.start_time.strftime("%d %b, %I:%M %p") if matched_event.start_time else "TBA"
             venue_str = matched_event.venue.name if matched_event.venue else "Campus Arena"
             fee_num = float(matched_event.registration_fee or 0)
+            is_paid_event = fee_num > 0
             fee_str = f"₹{fee_num:.0f}" if is_paid_event else "Free Entry"
 
             if is_paid_event:
-                ret_qr_pass = "🔒 Locked (Payment Pending)"
+                pass_key_output = "🔒 Locked (Payment Pending)"
                 msg = (
                     f"⏳ **Registration Initiated for {matched_event.title} (Payment Required)**\n\n"
                     f"• **Registration ID**: `{reg_num}`\n"
@@ -346,21 +347,7 @@ def register_student_for_event(
                     f"Please visit [My Registrations](/student/registrations) to pay **{fee_str}** and unlock your pass."
                 )
             else:
-                ret_qr_pass = qr_hash
-                msg = (
-                    f"🎉 **Registration Confirmed for {matched_event.title}!**\n\n"
-                    f"• **Registration ID**: `{reg_num}`\n"
-                    f"• **Participant**: {user.full_name}\n"
-                    f"• **Event Category**: {matched_event.category.name if matched_event.category else 'General'}\n"
-                    f"• **Date & Time**: {start_str}\n"
-                    f"• **Venue**: {venue_str}\n"
-                    f"• **Fee**: Free Entry (Status: `CONFIRMED`)\n"
-                    f"• **Digital Pass Key**: `{qr_hash}`\n"
-                    + (f"• **Team Name**: {created_team.name} (Share Invite Code: `{created_team.invite_code}`)\n" if created_team else "")
-                    + f"\nYour QR entry pass has been generated! You can access it anytime in your [Student Passes](/student/passes) or [Registrations](/student/registrations)."
-                )
-
-            if is_free:
+                pass_key_output = qr_hash
                 msg = (
                     f"🎉 **Registration Confirmed for {matched_event.title}!**\n\n"
                     f"• **Registration ID**: `{reg_num}`\n"
@@ -373,24 +360,6 @@ def register_student_for_event(
                     + (f"• **Team Name**: {created_team.name} (Share Invite Code: `{created_team.invite_code}`)\n" if created_team else "")
                     + f"\nYour QR entry pass has been generated! You can access it anytime in your [Student Passes](/student/passes) or [My Registrations](/student/registrations)."
                 )
-                pass_key_output = qr_hash
-            else:
-                msg = (
-                    f"📋 **Registration Initiated for {matched_event.title}!**\n\n"
-                    f"• **Registration ID**: `{reg_num}`\n"
-                    f"• **Participant**: {user.full_name}\n"
-                    f"• **Event Category**: {matched_event.category.name if matched_event.category else 'General'}\n"
-                    f"• **Date & Time**: {start_str}\n"
-                    f"• **Venue**: {venue_str}\n"
-                    f"• **Registration Fee**: {fee_str}\n"
-                    f"• **Registration Status**: `PENDING PAYMENT`\n"
-                    f"• **Digital QR Pass**: 🔒 Locked (Payment Pending)\n"
-                    + (f"• **Team Name**: {created_team.name} (Share Invite Code: `{created_team.invite_code}`)\n" if created_team else "")
-                    + f"\n⚠️ **Payment Pending**: Because this is a paid event ({fee_str}), your registration is in **Pending Payment** status. "
-                    f"Please navigate to [My Registrations](/student/registrations) and click **Pay {fee_str}**. "
-                    f"Once your payment is completed, your official digital QR entry pass will be unlocked and available in My Registrations!"
-                )
-                pass_key_output = "🔒 Locked (Payment Pending)"
 
             return {
                 "success": True,
