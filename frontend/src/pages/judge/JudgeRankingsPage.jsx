@@ -108,13 +108,14 @@ export default function JudgeRankingsPage() {
                   <th className="px-6 py-4">Rank</th>
                   <th className="px-6 py-4">Competitor / Team</th>
                   <th className="px-6 py-4">Reg ID</th>
+                  <th className="px-6 py-4">Rubric Breakdown & Notes</th>
                   <th className="px-6 py-4 text-right">Tabulated Points</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {leaderboard.map((item) => (
                   <tr key={item.registration_id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="px-6 py-4 font-bold text-sm">
+                    <td className="px-6 py-4 font-bold text-sm align-top">
                       {item.rank === 1 ? (
                         <span className="inline-flex items-center gap-1.5 text-amber-400">
                           <Trophy className="w-4 h-4" /> 1st Place
@@ -131,7 +132,7 @@ export default function JudgeRankingsPage() {
                         <span className="text-slate-400">#{item.rank}</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 align-top">
                       <div className="font-bold text-white text-sm">
                         {item.participant_name}
                       </div>
@@ -140,12 +141,39 @@ export default function JudgeRankingsPage() {
                           <Users className="w-3 h-3" /> Team: {item.team_name}
                         </div>
                       )}
+                      {item.participant_email && (
+                        <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                          {item.participant_email}
+                        </div>
+                      )}
                     </td>
-                    <td className="px-6 py-4 font-mono text-slate-400">
-                      #{item.registration_id}
+                    <td className="px-6 py-4 font-mono text-slate-400 align-top">
+                      #{item.registration_number || item.registration_id}
                     </td>
-                    <td className="px-6 py-4 text-right font-mono font-black text-white text-sm">
-                      {Number(item.total_score).toFixed(1)}{" "}
+                    <td className="px-6 py-4 space-y-1.5 align-top">
+                      {item.scores_by_criteria && Object.keys(item.scores_by_criteria).length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(item.scores_by_criteria).map(([critName, val]) => (
+                            <span
+                              key={critName}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-[10px] text-slate-300 font-mono"
+                            >
+                              <span>{critName}:</span>
+                              <strong className="text-amber-400">{val}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-500 italic text-[11px]">No rubric breakdown available</span>
+                      )}
+                      {item.remarks && (
+                        <div className="text-[11px] text-slate-300 italic bg-slate-950/70 p-1.5 rounded-lg border border-slate-800/80">
+                          "{item.remarks}"
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono font-black text-white text-base align-top">
+                      <span className="text-amber-400">{Number(item.total_score).toFixed(1)}</span>{" "}
                       <span className="text-slate-500 text-xs font-normal">pts</span>
                     </td>
                   </tr>

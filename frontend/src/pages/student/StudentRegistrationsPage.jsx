@@ -127,7 +127,14 @@ export default function StudentRegistrationsPage() {
           {filtered.map((reg) => {
             const fee = Number(reg.registration_fee ?? reg.event?.registration_fee ?? 0);
             const isPaid = fee === 0 || reg.payment_status === "PAID" || reg.payment_status === "SUCCESS";
-            const displayStatus = isPaid ? (reg.status || "CONFIRMED") : "PENDING_PAYMENT";
+            const isAttended = Boolean(
+              reg.has_attended === true ||
+              reg.is_attended === true ||
+              reg.status === "ATTENDED" ||
+              reg.entry_status === "VALID" ||
+              reg.entry_status === "ENTERED"
+            );
+            const displayStatus = isAttended ? "ATTENDED" : isPaid ? (reg.status || "CONFIRMED") : "PENDING_PAYMENT";
             const eventTitle = reg.event_title || reg.event?.title || `Event #${reg.event_id}`;
             const teamName = reg.team_name || reg.team?.name;
 
@@ -149,8 +156,17 @@ export default function StudentRegistrationsPage() {
                     >
                       {isPaid ? "Payment: Cleared (SUCCESS)" : "Payment: Pending"}
                     </span>
-                    <span className="text-xs text-slate-500">
-                      Reg ID: #{reg.id}
+                    {isAttended ? (
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3 text-emerald-400" /> Gate Check-In Approved
+                      </span>
+                    ) : isPaid ? (
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-400" /> Gate Check-In Pending
+                      </span>
+                    ) : null}
+                    <span className="text-xs text-slate-500 font-mono">
+                      #{reg.registration_number || reg.id}
                     </span>
                   </div>
 
@@ -196,9 +212,13 @@ export default function StudentRegistrationsPage() {
                   ) : (
                     <button
                       onClick={() => setPassRegId(reg.id)}
-                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-indigo-600/20"
+                      className={`px-4 py-2 rounded-xl text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-lg ${
+                        isAttended
+                          ? "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20"
+                          : "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20"
+                      }`}
                     >
-                      <QrCode className="w-4 h-4" /> View Entry Pass
+                      <QrCode className="w-4 h-4" /> {isAttended ? "Entry Pass (Gate Checked-In)" : "View Entry Pass"}
                     </button>
                   )}
                   <Link

@@ -245,6 +245,8 @@ export default function CoordinatorParticipantsPage() {
                   <tbody className="divide-y divide-slate-800">
                     {filteredParticipants.map((reg) => {
                       const hasAttended =
+                        reg.has_attended === true ||
+                        reg.is_attended === true ||
                         reg.entry_status === "VALID" ||
                         reg.entry_status === "ENTERED" ||
                         reg.status === "ATTENDED" ||
