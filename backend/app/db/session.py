@@ -31,7 +31,12 @@ else:
     engine_kwargs["max_overflow"] = int(os.getenv("DB_MAX_OVERFLOW", "20"))
 
     # Support SSL/TLS for hosted MySQL providers (e.g. Aiven, TiDB Cloud, Railway, AWS RDS)
-    db_ssl = os.getenv("DB_SSL", "").lower() in ("true", "1", "required")
+    db_ssl = (
+        os.getenv("DB_SSL", "").lower() in ("true", "1", "required")
+        or "ssl_mode" in database_url
+        or "tidbcloud.com" in database_url
+        or "aivencloud.com" in database_url
+    )
     if db_ssl and is_mysql:
         ssl_ca = os.getenv("DB_SSL_CA")
         if ssl_ca and os.path.exists(ssl_ca):

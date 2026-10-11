@@ -70,10 +70,26 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    connect_args = {}
+    is_mysql = "mysql" in db_url
+    needs_ssl = (
+        os.getenv("DB_SSL", "").lower() in ("true", "1", "required")
+        or "ssl_mode" in db_url
+        or "tidbcloud.com" in db_url
+        or "aivencloud.com" in db_url
+    )
+    if is_mysql and needs_ssl:
+        ssl_ca = os.getenv("DB_SSL_CA")
+        if ssl_ca and os.path.exists(ssl_ca):
+            connect_args["ssl"] = {"ca": ssl_ca}
+        else:
+            connect_args["ssl"] = {"ssl_mode": "REQUIRED"}
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     with connectable.connect() as connection:
