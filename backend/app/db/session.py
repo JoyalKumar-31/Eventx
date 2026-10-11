@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
 # Normalize database URL: ensure mysql:// uses pymysql driver and postgres uses psycopg
-database_url = settings.DATABASE_URL
+database_url = os.getenv("DATABASE_URL") or settings.DATABASE_URL
 if database_url.startswith("mysql://"):
     database_url = database_url.replace("mysql://", "mysql+pymysql://", 1)
 elif database_url.startswith("postgres://"):

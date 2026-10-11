@@ -21,11 +21,6 @@ if not current_db or "localhost" in current_db or "127.0.0.1" in current_db:
 # Signal serverless mode for database connection pooling (NullPool)
 os.environ["VERCEL"] = "1"
 
-# Ensure settings loads the Supabase DATABASE_URL
-from app.core.config import settings
-if not settings.DATABASE_URL or "localhost" in settings.DATABASE_URL or "127.0.0.1" in settings.DATABASE_URL:
-    settings.DATABASE_URL = os.environ["DATABASE_URL"]
-
 from app.main import app
 
 # Export app for Vercel Serverless Function
