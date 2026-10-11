@@ -87,24 +87,17 @@ async def custom_http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
-# Include API Routers under /api
-app.include_router(auth.router, prefix="/api")
-app.include_router(users.router, prefix="/api")
-app.include_router(events.router, prefix="/api")
-app.include_router(registrations.router, prefix="/api")
-app.include_router(teams.router, prefix="/api")
-app.include_router(payments.router, prefix="/api")
-app.include_router(attendance.router, prefix="/api")
-app.include_router(judges.router, prefix="/api")
-app.include_router(scores.router, prefix="/api")
-app.include_router(results.router, prefix="/api")
-app.include_router(certificates.router, prefix="/api")
-app.include_router(notifications.router, prefix="/api")
-app.include_router(announcements.router, prefix="/api")
-app.include_router(admin.router, prefix="/api")
-app.include_router(public.router, prefix="/api")
-app.include_router(agents.router, prefix="/api")
-app.include_router(invitations.router, prefix="/api")
+# Include API Routers under /api and bare paths for multi-environment proxy compatibility
+all_routers = [
+    auth.router, users.router, events.router, registrations.router,
+    teams.router, payments.router, attendance.router, judges.router,
+    scores.router, results.router, certificates.router, notifications.router,
+    announcements.router, admin.router, public.router, agents.router,
+    invitations.router
+]
+for r in all_routers:
+    app.include_router(r, prefix="/api")
+    app.include_router(r)
 
 
 @app.get("/", tags=["Health"])
