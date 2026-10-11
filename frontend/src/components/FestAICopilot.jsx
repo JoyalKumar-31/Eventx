@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { agentsApi } from "../api/agentsApi";
 import { useAuth } from "../auth/AuthContext";
+import { Link } from "react-router-dom";
 
 export default function FestAICopilot() {
   const { user, refreshUser } = useAuth();
@@ -164,36 +165,94 @@ export default function FestAICopilot() {
     ]);
   };
 
+  const renderInlineMarkdown = (str) => {
+    if (!str) return null;
+    const regex = /(\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+    const parts = str.split(regex);
+
+    return parts.map((part, i) => {
+      if (!part) return null;
+      const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      if (linkMatch) {
+        const [, text, url] = linkMatch;
+        return (
+          <Link
+            key={i}
+            to={url}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 font-semibold text-[11px] hover:bg-amber-500/25 transition-colors underline decoration-amber-400/50"
+          >
+            {text}
+          </Link>
+        );
+      }
+      if (part.startsWith("`") && part.endsWith("`")) {
+        return (
+          <code
+            key={i}
+            className="px-1.5 py-0.5 mx-0.5 rounded bg-slate-800 text-amber-300 font-mono text-[11px] border border-slate-700/60"
+          >
+            {part.slice(1, -1)}
+          </code>
+        );
+      }
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return (
+          <strong key={i} className="font-bold text-white">
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      if (part.startsWith("*") && part.endsWith("*")) {
+        return (
+          <em key={i} className="text-slate-300 italic">
+            {part.slice(1, -1)}
+          </em>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
   const renderFormattedText = (text) => {
     const lines = text.split("\n");
     return lines.map((line, idx) => {
       if (line.startsWith("### ")) {
         return (
-          <h4 key={idx} className="font-extrabold text-amber-400 text-sm mt-2 mb-1">
-            {line.replace("### ", "")}
+          <h4 key={idx} className="font-extrabold text-amber-400 text-sm mt-2.5 mb-1">
+            {renderInlineMarkdown(line.replace("### ", ""))}
           </h4>
         );
       }
       if (line.startsWith("## ")) {
         return (
-          <h3 key={idx} className="font-black text-amber-300 text-base mt-2 mb-1">
-            {line.replace("## ", "")}
+          <h3 key={idx} className="font-black text-amber-300 text-base mt-2.5 mb-1">
+            {renderInlineMarkdown(line.replace("## ", ""))}
           </h3>
         );
       }
       if (line.startsWith("• ") || line.startsWith("- ")) {
         return (
           <li key={idx} className="ml-4 list-disc text-slate-200 text-xs my-0.5 leading-relaxed">
-            {line.replace(/^[•-]\s+/, "")}
+            {renderInlineMarkdown(line.replace(/^[•-]\s+/, ""))}
           </li>
         );
+      }
+      if (line.startsWith("> ")) {
+        return (
+          <blockquote key={idx} className="pl-3 border-l-2 border-amber-500/50 text-slate-300 text-xs italic my-1.5 bg-slate-900/60 py-1 rounded-r">
+            {renderInlineMarkdown(line.replace(/^>\s+/, ""))}
+          </blockquote>
+        );
+      }
+      if (line.trim() === "---") {
+        return <hr key={idx} className="border-slate-800 my-2" />;
       }
       if (!line.trim()) {
         return <div key={idx} className="h-1.5" />;
       }
       return (
         <p key={idx} className="text-xs text-slate-200 leading-relaxed my-0.5">
-          {line}
+          {renderInlineMarkdown(line)}
         </p>
       );
     });
