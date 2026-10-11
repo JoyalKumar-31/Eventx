@@ -9,6 +9,8 @@ import {
   Award,
   Sparkles,
   AlertCircle,
+  Clock,
+  RefreshCw,
 } from "lucide-react";
 import { judgeApi } from "../../api/judgeApi";
 import { registrationApi } from "../../api/registrationApi";
@@ -25,6 +27,7 @@ export default function JudgeScoringPage() {
   const [criteria, setCriteria] = useState([]);
   const [scores, setScores] = useState({});
   const [remarks, setRemarks] = useState("");
+  const [evaluatedMap, setEvaluatedMap] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -55,28 +58,74 @@ export default function JudgeScoringPage() {
     }
   };
 
+  const processEvaluatedScores = (scoreList) => {
+    const evalMap = {};
+    (scoreList || []).forEach((s) => {
+      const regKey = String(s.registration_id);
+      if (!evalMap[regKey]) {
+        evalMap[regKey] = {
+          total: 0,
+          scores: {},
+          remarks: s.remarks || "",
+          submittedAt: s.submitted_at,
+        };
+      }
+      evalMap[regKey].scores[s.criteria_id] = Number(s.score_value);
+      evalMap[regKey].total += Number(s.score_value);
+      if (s.remarks && !evalMap[regKey].remarks) {
+        evalMap[regKey].remarks = s.remarks;
+      }
+    });
+    return evalMap;
+  };
+
   const loadEventData = async (eventId) => {
     try {
-      const [parts, critList] = await Promise.all([
+      const [parts, critList, existingScores] = await Promise.all([
         registrationApi.getEventParticipants(eventId).catch(() => []),
         judgeApi.getEventCriteria(eventId).catch(() => []),
+        judgeApi.getEventScores(eventId).catch(() => []),
       ]);
       setParticipants(parts || []);
       setCriteria(critList || []);
 
-      if (parts && parts.length > 0) {
-        setSelectedRegId(String(parts[0].id));
+      const evalMap = processEvaluatedScores(existingScores);
+      setEvaluatedMap(evalMap);
+
+      const firstRegId = (parts && parts.length > 0) ? String(parts[0].id) : "";
+      setSelectedRegId(firstRegId);
+
+      if (firstRegId && evalMap[firstRegId]) {
+        setScores({ ...evalMap[firstRegId].scores });
+        setRemarks(evalMap[firstRegId].remarks || "");
+      } else {
+        const initial = {};
+        (critList || []).forEach((c) => {
+          const maxVal = c.max_score || c.max_points || 10;
+          initial[c.id] = Math.round(maxVal * 0.7);
+        });
+        setScores(initial);
+        setRemarks("");
       }
-      // Initialize scores map
+    } catch (err) {
+      console.error("Failed to load event participants or criteria", err);
+    }
+  };
+
+  const handleSelectParticipant = (regId) => {
+    setSelectedRegId(regId);
+    setFeedback(null);
+    if (evaluatedMap[regId]) {
+      setScores({ ...evaluatedMap[regId].scores });
+      setRemarks(evaluatedMap[regId].remarks || "");
+    } else {
       const initial = {};
-      (critList || []).forEach((c) => {
+      criteria.forEach((c) => {
         const maxVal = c.max_score || c.max_points || 10;
-        initial[c.id] = Math.round(maxVal * 0.7); // default 70%
+        initial[c.id] = Math.round(maxVal * 0.7);
       });
       setScores(initial);
       setRemarks("");
-    } catch (err) {
-      console.error("Failed to load event participants or criteria", err);
     }
   };
 
@@ -116,9 +165,17 @@ export default function JudgeScoringPage() {
         remarks: remarks.trim(),
       });
 
+      // Re-fetch scores to sync state
+      const updatedScores = await judgeApi.getEventScores(Number(selectedEventId)).catch(() => []);
+      const evalMap = processEvaluatedScores(updatedScores);
+      setEvaluatedMap(evalMap);
+
+      const isUpdate = Boolean(evaluatedMap[selectedRegId]);
       setFeedback({
         type: "success",
-        text: "Scores submitted successfully and tabulated into leaderboards!",
+        text: isUpdate
+          ? "Official scorecard updated & saved! Standings synced with Event Coordinator."
+          : "Official scorecard submitted & saved! Transmitted to Event Coordinator.",
       });
     } catch (err) {
       console.error("Failed to submit score", err);
@@ -224,38 +281,58 @@ export default function JudgeScoringPage() {
         <form onSubmit={handleSubmitScore} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Competitor Selector Column */}
           <div className="lg:col-span-1 p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-              <Users className="w-4 h-4 text-amber-400" />
-              Select Competitor
-            </h3>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Users className="w-4 h-4 text-amber-400" />
+                Select Competitor
+              </h3>
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                {Object.keys(evaluatedMap).length} / {participants.length} Evaluated
+              </span>
+            </div>
 
-            <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
               {participants.map((p) => {
                 const isSelected = String(p.id) === String(selectedRegId);
                 const name = p.participant_name || p.user?.full_name || `Participant #${p.user_id}`;
                 const team = p.team_name || p.team?.name;
+                const isEvaluated = Boolean(evaluatedMap[String(p.id)]);
+                const evalData = evaluatedMap[String(p.id)];
 
                 return (
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => {
-                      setSelectedRegId(String(p.id));
-                      setFeedback(null);
-                    }}
+                    onClick={() => handleSelectParticipant(String(p.id))}
                     className={`w-full text-left p-3.5 rounded-2xl transition-all border ${
                       isSelected
-                        ? "bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5"
+                        ? isEvaluated
+                          ? "bg-emerald-500/15 border-emerald-500/60 shadow-lg shadow-emerald-500/10"
+                          : "bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5"
+                        : isEvaluated
+                        ? "bg-slate-950/80 border-emerald-500/25 hover:border-emerald-500/50"
                         : "bg-slate-950/60 border-slate-800/80 hover:border-slate-700"
                     }`}
                   >
-                    <div className="font-bold text-white text-sm">
-                      {name}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-bold text-white text-sm truncate">
+                        {name}
+                      </div>
+                      {isEvaluated && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
+                          <CheckCircle2 className="w-3 h-3" /> {evalData.total.toFixed(1)} pts
+                        </span>
+                      )}
                     </div>
-                    <div className="text-xs text-slate-400 mt-0.5 flex items-center justify-between">
+                    <div className="text-xs text-slate-400 mt-1 flex items-center justify-between">
                       <span>{team ? `Squad: ${team}` : "Solo Entry"}</span>
                       <span className="font-mono text-[11px] text-slate-500">#{p.registration_number || p.id}</span>
                     </div>
+                    {!isEvaluated && (
+                      <div className="mt-1 text-[10px] text-amber-400/80 font-medium flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> Awaiting Scorecard
+                      </div>
+                    )}
                   </button>
                 );
               })}
@@ -288,6 +365,33 @@ export default function JudgeScoringPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Status banner if already evaluated */}
+              {Boolean(evaluatedMap[String(selectedRegId)]) && (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-emerald-300">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-white text-sm flex items-center gap-2">
+                        Official Scorecard Submitted & Saved
+                        <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          Saved in System
+                        </span>
+                      </div>
+                      <div className="text-xs text-emerald-400/90 mt-0.5">
+                        Tabulated Score: <strong className="text-white font-mono">{calculateTotal()} pts</strong> • Official scorecard transmitted to Event Coordinator.
+                      </div>
+                    </div>
+                  </div>
+                  {evaluatedMap[String(selectedRegId)]?.submittedAt && (
+                    <span className="text-[11px] font-mono text-slate-400 self-end sm:self-center">
+                      Recorded {new Date(evaluatedMap[String(selectedRegId)].submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Rubric Sliders / Inputs */}
               {criteria.length === 0 ? (
@@ -366,18 +470,34 @@ export default function JudgeScoringPage() {
             </div>
 
             {/* Submit Action Button */}
-            <div className="pt-4 border-t border-slate-800 flex items-center justify-end">
+            <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="text-xs text-slate-400">
+                {Boolean(evaluatedMap[String(selectedRegId)]) ? (
+                  <span className="text-emerald-400 flex items-center gap-1.5 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Scorecard active. Modifying sliders will update standings.
+                  </span>
+                ) : (
+                  <span className="text-amber-400/90 flex items-center gap-1.5 font-medium">
+                    <Clock className="w-3.5 h-3.5" /> Not yet evaluated. Submit official scores to record.
+                  </span>
+                )}
+              </div>
+
               <button
                 type="submit"
                 disabled={submitting || criteria.length === 0 || !isEventCommenced()}
-                className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
+                className={`px-6 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs transition-all shadow-lg flex items-center gap-2 ${
+                  Boolean(evaluatedMap[String(selectedRegId)])
+                    ? "bg-emerald-500 hover:bg-emerald-400 shadow-emerald-500/20"
+                    : "bg-amber-500 hover:bg-amber-400 shadow-amber-500/20"
+                }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
                 {!isEventCommenced()
                   ? "Scoring Opens on Event Day"
                   : submitting
-                  ? "Tabulating Score..."
-                  : "Submit Official Scorecard"}
+                  ? (Boolean(evaluatedMap[String(selectedRegId)]) ? "Updating Scorecard..." : "Submitting Official Scorecard...")
+                  : (Boolean(evaluatedMap[String(selectedRegId)]) ? "Update Official Scorecard" : "Submit Official Scorecard")}
               </button>
             </div>
           </div>

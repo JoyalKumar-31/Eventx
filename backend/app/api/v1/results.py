@@ -44,10 +44,15 @@ def get_leaderboard(
     return [
         LeaderboardEntry(
             registration_id=item["registration_id"],
+            registration_number=item.get("registration_number"),
             participant_name=item["participant_name"],
+            participant_email=item.get("participant_email"),
             team_name=item["team_name"],
             total_score=item["total_score"],
-            rank=item["rank"]
+            rank=item["rank"],
+            scores_by_criteria=item.get("scores_by_criteria", {}),
+            remarks=item.get("remarks"),
+            judges=item.get("judges", [])
         )
         for item in leaderboard
     ]

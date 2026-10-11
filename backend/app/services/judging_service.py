@@ -8,7 +8,7 @@ from app.models.judging import JudgeAssignment, ScoreCriteria, Score, Result
 from app.models.event import Event
 from app.models.registration import Registration
 from app.models.user import User
-from app.models.enums import JudgeAssignmentStatus, UserRole, EventStatus
+from app.models.enums import JudgeAssignmentStatus, UserRole, EventStatus, NotificationType
 from app.schemas.judging import ScoreSubmissionRequest
 from app.services.audit_service import log_action
 from app.services.notification_service import create_notification
@@ -158,13 +158,39 @@ def submit_scores(
 
     db.commit()
 
+    # Calculate total score and participant details
+    total_score = sum(entry.score_value for entry in submission.scores)
+    participant_name = (
+        registration.team.name
+        if registration.team
+        else (registration.user.full_name if registration.user else f"Participant #{registration.id}")
+    )
+    judge_name = user.full_name if user else f"Judge #{judge_user_id}"
+
+    # Notify event coordinator
+    if event.coordinator_id:
+        create_notification(
+            db=db,
+            user_id=event.coordinator_id,
+            title="Judge Scorecard Submitted",
+            message=f"Judge {judge_name} submitted official scores for {participant_name} ({total_score:.1f} pts) in '{event.title}'.",
+            type=NotificationType.SUCCESS,
+            link=f"/coordinator/results?event_id={event_id}"
+        )
+
     log_action(
         db,
         action="SCORES_SUBMITTED",
         entity_type="Score",
         entity_id=str(submission.registration_id),
         user_id=judge_user_id,
-        new_values={"event_id": event_id, "score_count": len(submission.scores)}
+        new_values={
+            "event_id": event_id,
+            "registration_id": submission.registration_id,
+            "total_score": total_score,
+            "score_count": len(submission.scores),
+            "coordinator_notified": bool(event.coordinator_id)
+        }
     )
 
     return saved_scores
@@ -187,13 +213,30 @@ def calculate_event_leaderboard(db: Session, event_id: int, round_id: Optional[i
     for rank, (reg_id, total) in enumerate(grouped, start=1):
         reg = db.query(Registration).filter(Registration.id == reg_id).first()
         if reg:
+            reg_scores = db.query(Score).join(JudgeAssignment, Score.judge_assignment_id == JudgeAssignment.id)\
+                           .filter(JudgeAssignment.event_id == event_id, Score.registration_id == reg_id).all()
+            criteria_breakdown = {}
+            judge_names = set()
+            remarks_list = []
+            for s in reg_scores:
+                c_name = s.criteria.name if s.criteria else f"Criteria #{s.criteria_id}"
+                criteria_breakdown[c_name] = round(float(s.score_value), 2)
+                if s.judge_assignment and s.judge_assignment.judge:
+                    judge_names.add(s.judge_assignment.judge.full_name)
+                if s.remarks and s.remarks.strip():
+                    remarks_list.append(s.remarks.strip())
+
             leaderboard.append({
                 "registration_id": reg.id,
+                "registration_number": reg.registration_number,
                 "participant_name": reg.user.full_name,
                 "participant_email": reg.user.email,
                 "team_name": reg.team.name if reg.team else None,
                 "total_score": round(float(total), 2),
-                "rank": rank
+                "rank": rank,
+                "scores_by_criteria": criteria_breakdown,
+                "judges": list(judge_names),
+                "remarks": " | ".join(remarks_list) if remarks_list else None
             })
     return leaderboard
 

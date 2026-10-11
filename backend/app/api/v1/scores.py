@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -38,7 +38,8 @@ def submit_participant_scores(
             registration_id=s.registration_id,
             score_value=s.score_value,
             remarks=s.remarks,
-            submitted_at=s.submitted_at
+            submitted_at=s.submitted_at,
+            judge_name=current_user.full_name
         )
         for s in saved_scores
     ]
@@ -47,12 +48,15 @@ def submit_participant_scores(
 @router.get("/event/{event_id}", response_model=List[ScoreResponse])
 def get_event_scores(
     event_id: int,
-    registration_id: int = Query(...),
+    registration_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.JUDGE, UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
 ):
     query = db.query(Score).join(JudgeAssignment, Score.judge_assignment_id == JudgeAssignment.id)\
-              .filter(JudgeAssignment.event_id == event_id, Score.registration_id == registration_id)
+              .filter(JudgeAssignment.event_id == event_id)
+
+    if registration_id is not None:
+        query = query.filter(Score.registration_id == registration_id)
 
     # If Judge, show only their own scores
     if current_user.role == UserRole.JUDGE:
@@ -68,7 +72,8 @@ def get_event_scores(
             registration_id=s.registration_id,
             score_value=s.score_value,
             remarks=s.remarks,
-            submitted_at=s.submitted_at
+            submitted_at=s.submitted_at,
+            judge_name=s.judge_assignment.judge.full_name if (s.judge_assignment and s.judge_assignment.judge) else None
         )
         for s in scores
     ]

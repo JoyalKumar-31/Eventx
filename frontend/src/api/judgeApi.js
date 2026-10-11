@@ -33,8 +33,11 @@ export const judgeApi = {
     const res = await apiClient.post(`/scores/event/${eventId}`, data);
     return res.data;
   },
-  getEventScores: async (eventId, registrationId) => {
-    const res = await apiClient.get(`/scores/event/${eventId}?registration_id=${registrationId}`);
+  getEventScores: async (eventId, registrationId = null) => {
+    const url = registrationId
+      ? `/scores/event/${eventId}?registration_id=${registrationId}`
+      : `/scores/event/${eventId}`;
+    const res = await apiClient.get(url);
     return res.data;
   },
   getLeaderboard: async (eventId, roundId = null) => {

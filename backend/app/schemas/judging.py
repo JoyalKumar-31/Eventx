@@ -94,6 +94,7 @@ class ScoreResponse(BaseModel):
     score_value: float
     remarks: Optional[str] = None
     submitted_at: datetime
+    judge_name: Optional[str] = None
 
 
 class ResultResponse(BaseModel):
@@ -112,8 +113,12 @@ class ResultResponse(BaseModel):
 
 class LeaderboardEntry(BaseModel):
     registration_id: int
+    registration_number: Optional[str] = None
     participant_name: str
+    participant_email: Optional[str] = None
     team_name: Optional[str] = None
     total_score: float
     rank: int
     scores_by_criteria: dict = {}
+    remarks: Optional[str] = None
+    judges: Optional[List[str]] = []
