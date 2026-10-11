@@ -55,6 +55,17 @@ export const EventCard = ({
     return "from-indigo-900/80 via-slate-900 to-slate-950";
   };
 
+  const now = new Date();
+  const deadlineDate = event.registration_deadline ? new Date(event.registration_deadline) : null;
+  const endDate = event.end_time ? new Date(event.end_time) : null;
+  const isDeadlinePassed = deadlineDate ? deadlineDate < now : false;
+  const isEventEnded = endDate ? endDate < now : false;
+  const isRegistrationClosed = status === "REGISTRATION_CLOSED" || isDeadlinePassed || isEventEnded;
+
+  const effectiveStatus = (isRegistrationClosed && status !== "COMPLETED")
+    ? "REGISTRATION_CLOSED"
+    : status;
+
   const spotsLeft = Math.max(0, (max_participants || 0) - (current_participants || 0));
   const isFull = spotsLeft === 0;
 
@@ -98,7 +109,7 @@ export const EventCard = ({
           {registrationStatus ? (
             <StatusBadge status={registrationStatus} />
           ) : (
-            <StatusBadge status={status} />
+            <StatusBadge status={effectiveStatus} />
           )}
         </div>
 
@@ -106,12 +117,22 @@ export const EventCard = ({
         <div className="absolute bottom-2.5 right-3">
           <span
             className={`text-xs px-2 py-0.5 rounded-md font-medium backdrop-blur-md ${
-              isFull
+              isEventEnded
+                ? "bg-slate-800/90 text-slate-400 border border-slate-700/50"
+                : isDeadlinePassed || status === "REGISTRATION_CLOSED"
+                ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                : isFull
                 ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
                 : "bg-slate-900/80 text-slate-300 border border-slate-700/50"
             }`}
           >
-            {isFull ? "Event Full" : `${spotsLeft} slots left`}
+            {isEventEnded
+              ? "Event Concluded"
+              : isDeadlinePassed || status === "REGISTRATION_CLOSED"
+              ? "Deadline Complete"
+              : isFull
+              ? "Event Full"
+              : `${spotsLeft} slots left`}
           </span>
         </div>
       </div>
@@ -168,16 +189,26 @@ export const EventCard = ({
             >
               Registered
             </Link>
+          ) : isRegistrationClosed ? (
+            <button
+              disabled
+              title="Registration deadline for this event has ended"
+              className="flex-1 inline-flex items-center justify-center px-3.5 py-2 rounded-xl text-xs font-semibold bg-rose-500/10 text-rose-300/90 border border-rose-500/30 cursor-not-allowed text-center"
+            >
+              Registration Deadline Complete
+            </button>
+          ) : isFull ? (
+            <button
+              disabled
+              className="flex-1 inline-flex items-center justify-center px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-500 border border-slate-800 cursor-not-allowed text-center"
+            >
+              Event Full
+            </button>
           ) : (
             onRegister && (
               <button
                 onClick={() => onRegister(event)}
-                disabled={isFull || status === "REGISTRATION_CLOSED"}
-                className={`flex-1 inline-flex items-center justify-center px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
-                  isFull || status === "REGISTRATION_CLOSED"
-                    ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-800"
-                    : "bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-500/20 cursor-pointer"
-                }`}
+                className="flex-1 inline-flex items-center justify-center px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20 cursor-pointer transition-all"
               >
                 Register
               </button>

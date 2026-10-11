@@ -226,6 +226,32 @@ def register_student_for_event(
                     "message": f"Could not find an event matching '{event_name_or_id}'. Available events:\n" + "\n".join(avail_titles)
                 }
 
+            # 2.5 Check deadline and event conclusion
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            dl = matched_event.registration_deadline if matched_event.registration_deadline.tzinfo else matched_event.registration_deadline.replace(tzinfo=timezone.utc)
+            end = matched_event.end_time if matched_event.end_time.tzinfo else matched_event.end_time.replace(tzinfo=timezone.utc)
+
+            if now > end or matched_event.status == EventStatus.COMPLETED:
+                if matched_event.status != EventStatus.COMPLETED:
+                    matched_event.status = EventStatus.COMPLETED
+                    db.commit()
+                return {
+                    "success": False,
+                    "error": "EVENT_CONCLUDED",
+                    "message": f"⚠️ **{matched_event.title}** has already concluded. Registrations are closed."
+                }
+
+            if now > dl or matched_event.status == EventStatus.REGISTRATION_CLOSED:
+                if matched_event.status in [EventStatus.PUBLISHED, EventStatus.ONGOING]:
+                    matched_event.status = EventStatus.REGISTRATION_CLOSED
+                    db.commit()
+                return {
+                    "success": False,
+                    "error": "REGISTRATION_DEADLINE_PASSED",
+                    "message": f"⚠️ Registration deadline for **{matched_event.title}** has passed. Registration deadline complete."
+                }
+
             # 3. Check existing registration
             existing_reg = db.query(Registration).filter(
                 Registration.event_id == matched_event.id,

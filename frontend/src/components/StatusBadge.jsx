@@ -27,14 +27,19 @@ export const StatusBadge = ({ status }) => {
       case "ONGOING":
       case "ATTENDED":
         return "bg-indigo-500/15 text-indigo-400 border-indigo-500/30";
+      case "REGISTRATION_CLOSED":
+        return "bg-rose-500/15 text-rose-400 border-rose-500/30";
       case "COMPLETED":
-        return "bg-amber-500/15 text-amber-300 border-amber-500/30";
+        return "bg-slate-500/15 text-slate-300 border-slate-500/30";
       default:
         return "bg-slate-700/30 text-slate-300 border-slate-600/30";
     }
   };
 
   const formatText = (str) => {
+    if (str.toUpperCase() === "REGISTRATION_CLOSED") {
+      return "Registration Deadline Complete";
+    }
     return str.replace(/_/g, " ");
   };
 

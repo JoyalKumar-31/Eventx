@@ -102,13 +102,26 @@ def register_for_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    if event.status not in [EventStatus.PUBLISHED, EventStatus.ONGOING]:
-        raise HTTPException(status_code=400, detail=f"Registrations are not open for this event (status: {event.status.value})")
+    now = datetime.now(timezone.utc)
+    deadline = event.registration_deadline if event.registration_deadline.tzinfo else event.registration_deadline.replace(tzinfo=timezone.utc)
+    end_time = event.end_time if event.end_time.tzinfo else event.end_time.replace(tzinfo=timezone.utc)
+
+    # Concluded event validation
+    if now > end_time or event.status == EventStatus.COMPLETED:
+        if event.status != EventStatus.COMPLETED:
+            event.status = EventStatus.COMPLETED
+            db.commit()
+        raise HTTPException(status_code=400, detail="This event has concluded. Registrations are closed.")
 
     # Deadline validation
-    deadline = event.registration_deadline if event.registration_deadline.tzinfo else event.registration_deadline.replace(tzinfo=timezone.utc)
-    if datetime.now(timezone.utc) > deadline:
-        raise HTTPException(status_code=400, detail="Registration deadline for this event has passed")
+    if now > deadline or event.status == EventStatus.REGISTRATION_CLOSED:
+        if event.status in [EventStatus.PUBLISHED, EventStatus.ONGOING]:
+            event.status = EventStatus.REGISTRATION_CLOSED
+            db.commit()
+        raise HTTPException(status_code=400, detail="Registration deadline for this event has passed. Registration deadline complete.")
+
+    if event.status not in [EventStatus.PUBLISHED, EventStatus.ONGOING]:
+        raise HTTPException(status_code=400, detail=f"Registrations are not open for this event (status: {event.status.value})")
 
     # Capacity validation
     if event.current_participants >= event.max_participants:

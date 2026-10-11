@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { Calendar, MapPin, Users, Ticket, ShieldAlert, CheckCircle, ArrowLeft, Mail, Award, Clock } from "lucide-react";
+import { Calendar, MapPin, Users, Ticket, ShieldAlert, CheckCircle, ArrowLeft, Mail, Award, Clock, AlertCircle } from "lucide-react";
 import { eventApi } from "../../api/eventApi";
 import { registrationApi } from "../../api/registrationApi";
 import { useAuth } from "../../auth/AuthContext";
@@ -41,7 +41,24 @@ export const EventDetailPage = () => {
     fetchDetail();
   }, [id, isAuthenticated]);
 
+  const now = new Date();
+  const deadlineDate = event?.registration_deadline ? new Date(event.registration_deadline) : null;
+  const endDate = event?.end_time ? new Date(event.end_time) : null;
+  const isDeadlinePassed = deadlineDate ? deadlineDate < now : false;
+  const isEventEnded = endDate ? endDate < now : false;
+  const isRegistrationClosed = event ? (event.status === "REGISTRATION_CLOSED" || isDeadlinePassed || isEventEnded || event.status === "COMPLETED") : false;
+
+  const effectiveStatus = (isDeadlinePassed || event?.status === "REGISTRATION_CLOSED") && !isEventEnded && event?.status !== "COMPLETED"
+    ? "REGISTRATION_CLOSED"
+    : isEventEnded || event?.status === "COMPLETED"
+    ? "COMPLETED"
+    : event?.status;
+
   const handleRegister = async () => {
+    if (isRegistrationClosed) {
+      alert("Registration deadline for this event has passed. Registration deadline complete.");
+      return;
+    }
     if (!isAuthenticated) {
       navigate("/login");
       return;
@@ -123,7 +140,7 @@ export const EventDetailPage = () => {
             <span className="px-3 py-1 rounded-lg text-xs font-semibold uppercase tracking-wider bg-slate-900/80 border border-slate-700 text-indigo-300 backdrop-blur-md">
               {event.category?.name || "General"}
             </span>
-            <StatusBadge status={event.status} />
+            <StatusBadge status={effectiveStatus} />
           </div>
 
           <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
@@ -296,10 +313,15 @@ export const EventDetailPage = () => {
           </div>
 
           <div className="space-y-2 border-t border-slate-800 pt-4 text-xs text-slate-300">
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span className="text-slate-400">Deadline:</span>
-              <span className="font-semibold text-white">
-                {new Date(event.registration_deadline).toLocaleDateString([], { month: "short", day: "numeric" })}
+              <span className={`font-semibold flex items-center gap-1.5 ${isDeadlinePassed ? "text-rose-400" : "text-white"}`}>
+                {new Date(event.registration_deadline).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                {isDeadlinePassed && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-medium">
+                    Ended
+                  </span>
+                )}
               </span>
             </div>
             <div className="flex justify-between">
@@ -321,10 +343,25 @@ export const EventDetailPage = () => {
                 View Your Digital QR Pass
               </Link>
             </div>
+          ) : isRegistrationClosed ? (
+            <div className="space-y-2.5">
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2.5 text-rose-300">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span className="text-xs font-medium">
+                  {isEventEnded ? "Event has concluded." : "Registration deadline has ended for this event."}
+                </span>
+              </div>
+              <button
+                disabled
+                className="w-full py-3 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-300/90 border border-rose-500/30 cursor-not-allowed shadow-none"
+              >
+                Registration Deadline Complete
+              </button>
+            </div>
           ) : (
             <button
               onClick={handleRegister}
-              disabled={spotsLeft === 0 || event.status === "REGISTRATION_CLOSED"}
+              disabled={spotsLeft === 0}
               className="w-full py-3 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
             >
               {spotsLeft === 0 ? "Event Full" : event.is_team_event ? "Register with Team" : "Register Now"}

@@ -1,7 +1,7 @@
 import re
 import uuid
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -38,6 +38,29 @@ def slugify(text: str) -> str:
     text = re.sub(r"[^\w\s-]", "", text)
     text = re.sub(r"[\s_-]+", "-", text)
     return text.strip("-")
+
+
+def sync_event_status_with_time(event: Event) -> bool:
+    """
+    Checks if an event's registration deadline or end time has passed
+    against the current time, updating status appropriately:
+    - If now > event.end_time: COMPLETED (if not already completed/cancelled)
+    - Else if now > event.registration_deadline: REGISTRATION_CLOSED (if still published/ongoing)
+    Returns True if modified.
+    """
+    now = datetime.now(timezone.utc)
+    dl = event.registration_deadline if event.registration_deadline.tzinfo else event.registration_deadline.replace(tzinfo=timezone.utc)
+    end = event.end_time if event.end_time.tzinfo else event.end_time.replace(tzinfo=timezone.utc)
+    modified = False
+
+    if now > end and event.status not in [EventStatus.COMPLETED, EventStatus.CANCELLED]:
+        event.status = EventStatus.COMPLETED
+        modified = True
+    elif now > dl and event.status in [EventStatus.PUBLISHED, EventStatus.ONGOING]:
+        event.status = EventStatus.REGISTRATION_CLOSED
+        modified = True
+
+    return modified
 
 
 def format_event_response(event: Event) -> EventListResponse:
@@ -199,6 +222,20 @@ def list_events(
             )
         )
 
+    # Automatically synchronize any expired events with present date/time
+    now = datetime.now(timezone.utc)
+    expired_events = db.query(Event).filter(
+        Event.status.in_([EventStatus.PUBLISHED, EventStatus.ONGOING]),
+        or_(Event.registration_deadline < now, Event.end_time < now)
+    ).all()
+    if expired_events:
+        for ev in expired_events:
+            sync_event_status_with_time(ev)
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+
     events = query.order_by(Event.start_time.asc()).offset(skip).limit(limit).all()
     return [format_event_response(e) for e in events]
 
@@ -215,6 +252,15 @@ def list_my_coordinated_events(
         from app.models.judging import JudgeAssignment
         query = query.join(JudgeAssignment, Event.id == JudgeAssignment.event_id).filter(JudgeAssignment.judge_id == current_user.id)
     events = query.order_by(Event.created_at.desc()).all()
+    has_changes = False
+    for e in events:
+        if sync_event_status_with_time(e):
+            has_changes = True
+    if has_changes:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
     return [format_event_response(e) for e in events]
 
 
@@ -232,6 +278,12 @@ def get_event_detail(
     if event.status == EventStatus.DRAFT:
         if not current_user or (current_user.role != UserRole.ADMIN and event.coordinator_id != current_user.id):
             raise HTTPException(status_code=403, detail="This event is currently in draft and not publicly accessible.")
+
+    if sync_event_status_with_time(event):
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
 
     return format_event_detail_response(event)
 
