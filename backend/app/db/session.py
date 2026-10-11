@@ -1,15 +1,26 @@
 import os
+try:
+    import pymysql
+    pymysql.install_as_MySQLdb()
+except ImportError:
+    pass
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
+
+# Normalize database URL: ensure mysql:// uses pymysql driver
+database_url = settings.DATABASE_URL
+if database_url.startswith("mysql://"):
+    database_url = database_url.replace("mysql://", "mysql+pymysql://", 1)
 
 connect_args = {}
 engine_kwargs = {
     "pool_pre_ping": True,
 }
 
-is_sqlite = settings.DATABASE_URL.startswith("sqlite")
-is_mysql = "mysql" in settings.DATABASE_URL
+is_sqlite = database_url.startswith("sqlite")
+is_mysql = "mysql" in database_url
 
 if is_sqlite:
     connect_args["check_same_thread"] = False
@@ -29,7 +40,7 @@ else:
             connect_args["ssl"] = {"ssl_mode": "REQUIRED"}
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    database_url,
     connect_args=connect_args,
     **engine_kwargs
 )
