@@ -194,7 +194,12 @@ def register_student_for_event(
 
             # 2. Resolve Event
             clean_input = str(event_name_or_id).strip().lower()
-            db_events = db.query(Event).filter(Event.status != EventStatus.DRAFT).all()
+            db_events = (
+                db.query(Event)
+                .filter(Event.status != EventStatus.DRAFT)
+                .order_by(Event.created_at.desc(), Event.id.desc())
+                .all()
+            )
             matched_event = None
 
             # Numeric ID match
@@ -219,11 +224,11 @@ def register_student_for_event(
                         break
 
             if not matched_event:
-                avail_titles = [f"• **{e.title}** ({e.category.name if e.category else 'General'})" for e in db_events[:5]]
+                avail_titles = [f"• **{e.title}** ({e.category.name if e.category else 'General'})" for e in db_events[:8]]
                 return {
                     "success": False,
                     "error": "EVENT_NOT_FOUND",
-                    "message": f"Could not find an event matching '{event_name_or_id}'. Available events:\n" + "\n".join(avail_titles)
+                    "message": f"Could not find an event matching '{event_name_or_id}'. Available active events:\n" + "\n".join(avail_titles)
                 }
 
             # 2.5 Check deadline and event conclusion

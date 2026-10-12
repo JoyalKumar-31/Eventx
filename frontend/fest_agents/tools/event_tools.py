@@ -14,7 +14,12 @@ def get_all_events() -> List[Dict[str, Any]]:
         from app.models.enums import EventStatus
         db = SessionLocal()
         try:
-            db_events = db.query(Event).filter(Event.status != EventStatus.DRAFT).all()
+            db_events = (
+                db.query(Event)
+                .filter(Event.status != EventStatus.DRAFT)
+                .order_by(Event.created_at.desc(), Event.id.desc())
+                .all()
+            )
             summary = []
             for ev in db_events:
                 start_str = ev.start_time.strftime("%d %b, %I:%M %p") if ev.start_time else "TBA"
@@ -24,12 +29,17 @@ def get_all_events() -> List[Dict[str, Any]]:
                     venue_str += f" ({ev.venue.room_number})"
                 summary.append({
                     "event_key": str(ev.id),
+                    "id": ev.id,
                     "title": ev.title,
+                    "status": ev.status.value if hasattr(ev.status, "value") else str(ev.status),
                     "category": ev.category.name if ev.category else "General",
                     "venue": venue_str,
                     "time": f"{start_str} - {end_str}",
                     "team_size": f"{ev.min_team_size}-{ev.max_team_size} members" if ev.is_team_event else "Individual (Solo)",
-                    "fee": f"Rs. {float(ev.registration_fee):.0f}" if ev.registration_fee > 0 else "Free Entry"
+                    "fee": f"Rs. {float(ev.registration_fee):.0f}" if ev.registration_fee > 0 else "Free Entry",
+                    "registration_deadline": ev.registration_deadline.strftime("%d %b, %I:%M %p") if ev.registration_deadline else "TBA",
+                    "participants": f"{ev.current_participants}/{ev.max_participants}",
+                    "created_at": ev.created_at.strftime("%Y-%m-%d %H:%M:%S") if ev.created_at else None
                 })
             return summary
         finally:
@@ -50,7 +60,12 @@ def get_event_details(event_name: str) -> Optional[Dict[str, Any]]:
         db = SessionLocal()
         try:
             clean = event_name.lower().strip()
-            db_events = db.query(Event).filter(Event.status != EventStatus.DRAFT).all()
+            db_events = (
+                db.query(Event)
+                .filter(Event.status != EventStatus.DRAFT)
+                .order_by(Event.created_at.desc(), Event.id.desc())
+                .all()
+            )
 
             # 1. Exact or substring match of event title
             for ev in db_events:
@@ -80,9 +95,13 @@ def get_event_details(event_name: str) -> Optional[Dict[str, Any]]:
                     }
 
             # 2. Token match excluding common query stopwords
-            stopwords = {"what", "are", "the", "for", "and", "rules", "rule", "detail", "details",
-                         "when", "where", "about", "show", "tell", "give", "info", "information",
-                         "event", "events", "how", "much", "many", "does", "cost"}
+            stopwords = {
+                "what", "are", "the", "for", "and", "rules", "rule", "detail", "details",
+                "when", "where", "about", "show", "tell", "give", "info", "information",
+                "event", "events", "how", "much", "many", "does", "cost", "new", "latest",
+                "recent", "recently", "added", "update", "updated", "which", "list", "all",
+                "available", "happening", "upcoming", "can", "see", "view", "display"
+            }
             words = [w for w in re.findall(r'[a-zA-Z0-9]+', clean) if len(w) > 2 and w not in stopwords]
             
             best_match = None

@@ -251,7 +251,7 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
             return "result_cert_agent"
         elif has_any(["sponsor", "sponsors", "analytic", "analytics", "revenue", "footfall", "financial", "funding", "stats"]):
             return "sponsor_analytics_agent"
-        elif has_any(["timing", "venue", "schedule", "clash", "rules", "when", "event", "events"]):
+        elif has_any(["timing", "venue", "schedule", "clash", "rules", "when", "event", "events", "competition", "competitions", "contest", "contests", "workshop", "workshops", "catalog"]):
             return "event_agent"
         else:
             return "faq_agent"
@@ -297,14 +297,28 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
 
         all_evs = get_all_events()
         if all_evs:
-            events_str = "\n".join(
-                f"• **{e['title']}** ({e['category']}) — {e['time']} at *{e['venue']}* [{e['fee']}]"
-                for e in all_evs[:6]
+            is_recent_query = any(k in lower for k in ["new", "recent", "recently", "added", "update", "updated", "latest"])
+            title_header = "### 🎪 Latest & Recently Added Festival Events" if is_recent_query else "### 🎪 Live EventX Festival Catalog"
+            intro_msg = (
+                "Here are the newly added and upcoming competitions queried live from our database (newest first):\n\n"
+                if is_recent_query else
+                "Here are the active competitions and workshops queried live from our database:\n\n"
             )
+
+            event_items = []
+            for i, e in enumerate(all_evs[:15]):
+                new_tag = " ✨ **[New]**" if i < 3 else ""
+                status_str = f" `[{e.get('status', 'OPEN')}]`"
+                event_items.append(
+                    f"• **{e['title']}** ({e['category']}){new_tag} — ⏰ {e['time']} | 📍 *{e['venue']}* | 💰 {e['fee']} | 👥 {e['team_size']}{status_str}"
+                )
+
+            events_str = "\n".join(event_items)
             return (
-                f"### 🎪 Live EventX Festival Catalog\n\n"
-                f"Here are the active competitions and workshops queried from our live database:\n\n"
+                f"{title_header}\n\n"
+                f"{intro_msg}"
                 f"{events_str}\n\n"
+                f"👉 *To register for any event, simply say: **\"Register me for [Event Name]\"** or explore the complete interactive catalog at [Event Catalog](/events).*\n"
                 f"🔍 *Ask for any specific event by name to see complete rules, team sizes, and venue maps!*"
             )
 
@@ -721,7 +735,7 @@ USER REQUEST:
 {question}
 
 Analyze the request and route to ONLY ONE of the following specialized agents:
-- event_agent: Event details, schedules, timings, venues, rules, schedule clashes.
+- event_agent: Show events, list competitions, newly added events, recently updated events, event schedules, timings, venues, rules, schedule clashes, festival catalog.
 - participant_agent: Event registration, student registration action, team size limits, QR entry pass, gate attendance, my passes, view profile, update or change profile details (year of study, department, phone, college name, student ID, full name).
 - judging_agent: Scoring rubrics, judge evaluations, score calculations, calculate marks, who got maximum score, highest score, leaderboard, team rankings, assigned judging panels, participant rosters to evaluate, and all judge website actions.
 - result_cert_agent: Publishing results, winner announcements, generating certificate text.
@@ -769,11 +783,29 @@ def event_management_agent(state: AgentState) -> Dict[str, Any]:
     all_events = get_all_events()
     matched_event = get_event_details(question)
 
+    import json
+    events_payload = matched_event if matched_event else all_events[:15]
+    events_json = json.dumps(events_payload, indent=2, default=str)
+
     prompt = f"""
-You are the Event Management Agent of EventX.
-USER INQUIRY: {question}
-EVENT DATA: {matched_event or all_events[:5]}
-Respond politely with complete event schedules, venue locations, team requirements, and rules.
+You are the Event Management Agent of EventX college fest platform.
+The events in EVENT DATA are retrieved live from the database and ordered with the NEWEST / MOST RECENTLY CREATED EVENTS FIRST.
+
+USER INQUIRY:
+{question}
+
+EVENT DATA (from Live Database, ordered newest first):
+{events_json}
+
+GUIDELINES:
+1. If the user asks to show, list, or check events (including newly added, recent, or updated events):
+   - Present the festival competitions and workshops in reverse-chronological order (newest first).
+   - Prominently highlight the newest events (e.g. ✨ [New]).
+   - For each event, include: Title, Category, Date/Time Schedule, Venue, Registration Fee, and Team Size / Solo requirements.
+   - Mention that students can register instantly by saying "Register me for [Event Name]" or by visiting the interactive [Event Catalog](/events).
+2. If the user asks about a specific competition:
+   - Provide complete details: Rules, Schedule, Venue, Registration Fee, Team Requirements, and how to register.
+3. Be friendly, energetic, accurate to the live database events, and format the response with clean Markdown.
 """
     answer = invoke_llm(prompt, "event_agent", state)
 

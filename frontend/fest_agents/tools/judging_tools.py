@@ -99,7 +99,12 @@ def resolve_event_for_judging(query_or_name: Optional[str] = None, judge_id: Opt
                 if ev:
                     return ev
 
-            events = s.query(Event).filter(Event.status != EventStatus.DRAFT).all()
+            events = (
+                s.query(Event)
+                .filter(Event.status != EventStatus.DRAFT)
+                .order_by(Event.created_at.desc(), Event.id.desc())
+                .all()
+            )
 
             if clean:
                 # Filter noise and stop words
@@ -571,7 +576,12 @@ def calculate_and_record_scores(
             # 1. Resolve Event
             matched_event = resolve_event_for_judging(event_name_or_id, judge_id, db_session=db)
             if not matched_event:
-                db_events = db.query(Event).filter(Event.status != EventStatus.DRAFT).all()
+                db_events = (
+                    db.query(Event)
+                    .filter(Event.status != EventStatus.DRAFT)
+                    .order_by(Event.created_at.desc(), Event.id.desc())
+                    .all()
+                )
                 matched_event = db_events[0] if db_events else None
 
             event_id = matched_event.id if matched_event else 1
