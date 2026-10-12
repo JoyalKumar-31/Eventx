@@ -359,8 +359,12 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
             for i, e in enumerate(all_evs[:15]):
                 new_tag = " ✨ **[New]**" if i < 3 else ""
                 is_full = e.get("is_capacity_full") or e.get("current_participants", 0) >= e.get("max_participants", 50)
-                if is_full:
-                    status_str = f" `[🔴 REGISTRATIONS FULL]`"
+                if e.get("is_completed"):
+                    status_str = " `[🏁 COMPLETED]`"
+                elif e.get("is_deadline_passed"):
+                    status_str = " `[⛔ REGISTRATION DEADLINE CLOSED]`"
+                elif is_full:
+                    status_str = " `[🔴 REGISTRATIONS FULL]`"
                 else:
                     status_str = f" `[{e.get('status', 'OPEN')}]`"
                 event_items.append(
@@ -917,12 +921,14 @@ EVENT DATA (from Live Database):
 GUIDELINES:
 1. If the user is an Event Coordinator asking for events created/managed by them:
    - Detail their created competitions, venue, schedule, entry fees, and registration capacity counts.
-   - If capacity is full, highlight 🔴 CAPACITY FULL ({events_payload.get('current_participants', '')}/{events_payload.get('max_participants', '')}).
+   - If capacity is full, highlight 🔴 CAPACITY FULL (current_participants / max_participants).
 2. If the user is asking how many are registered for an event:
    - Provide the complete registration roster breakdown (total registered, confirmed active, attended, pending payment, available spots).
    - If registrations reached max capacity, inform them that registrations are full.
-3. If asking to browse or show events:
+3. If asking to browse or show events (e.g. "What events are scheduled for today?"):
    - Present festival competitions in reverse-chronological order (newest first).
+   - If an event is completed (is_completed is true), clearly label 🏁 [Completed].
+   - If registration deadline has passed (is_deadline_passed is true), clearly label ⛔ [Registration Deadline Closed].
    - If an event has reached capacity (is_capacity_full is true), label it as 🔴 [Registrations Full].
    - Provide registration instructions ("Register me for [Event Name]") for open competitions.
 4. If asking about a specific competition:

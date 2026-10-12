@@ -3,6 +3,7 @@ tools/event_tools.py - Event Management and Scheduling Tools
 Integrated with live MySQL database and fallback dataset.
 """
 
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 
@@ -27,13 +28,17 @@ def get_all_events() -> List[Dict[str, Any]]:
                 venue_str = ev.venue.name if ev.venue else "Campus Arena"
                 if ev.venue and ev.venue.room_number:
                     venue_str += f" ({ev.venue.room_number})"
+                now = datetime.now()
                 is_full = ev.current_participants >= ev.max_participants
+                is_deadline_passed = bool(ev.registration_deadline and ev.registration_deadline < now)
+                ev_status_val = str(ev.status.value if hasattr(ev.status, "value") else ev.status).upper()
+                is_completed = bool(ev.end_time and ev.end_time < now) or (ev_status_val == "COMPLETED")
                 summary.append({
                     "event_key": str(ev.id),
                     "id": ev.id,
                     "coordinator_id": ev.coordinator_id,
                     "title": ev.title,
-                    "status": ev.status.value if hasattr(ev.status, "value") else str(ev.status),
+                    "status": ev_status_val,
                     "category": ev.category.name if ev.category else "General",
                     "venue": venue_str,
                     "time": f"{start_str} - {end_str}",
@@ -43,6 +48,8 @@ def get_all_events() -> List[Dict[str, Any]]:
                     "current_participants": ev.current_participants,
                     "max_participants": ev.max_participants,
                     "is_capacity_full": is_full,
+                    "is_deadline_passed": is_deadline_passed,
+                    "is_completed": is_completed,
                     "participants": f"{ev.current_participants}/{ev.max_participants}",
                     "created_at": ev.created_at.strftime("%Y-%m-%d %H:%M:%S") if ev.created_at else None
                 })
