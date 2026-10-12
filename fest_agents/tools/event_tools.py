@@ -7,6 +7,17 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 
+def _is_past_datetime(dt: Optional[datetime]) -> bool:
+    if not dt:
+        return False
+    try:
+        if dt.tzinfo is not None:
+            return dt < datetime.now(dt.tzinfo)
+        return dt < datetime.now()
+    except Exception:
+        return False
+
+
 def get_all_events() -> List[Dict[str, Any]]:
     """Returns a list of all registered fest events directly from the database."""
     try:
@@ -28,11 +39,10 @@ def get_all_events() -> List[Dict[str, Any]]:
                 venue_str = ev.venue.name if ev.venue else "Campus Arena"
                 if ev.venue and ev.venue.room_number:
                     venue_str += f" ({ev.venue.room_number})"
-                now = datetime.now()
                 is_full = ev.current_participants >= ev.max_participants
-                is_deadline_passed = bool(ev.registration_deadline and ev.registration_deadline < now)
+                is_deadline_passed = _is_past_datetime(ev.registration_deadline)
                 ev_status_val = str(ev.status.value if hasattr(ev.status, "value") else ev.status).upper()
-                is_completed = bool(ev.end_time and ev.end_time < now) or (ev_status_val == "COMPLETED")
+                is_completed = _is_past_datetime(ev.end_time) or (ev_status_val == "COMPLETED")
                 summary.append({
                     "event_key": str(ev.id),
                     "id": ev.id,
