@@ -76,20 +76,13 @@ def submit_scores(
     if event.status in [EventStatus.DRAFT, EventStatus.CANCELLED]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot submit scores for an event with status '{event.status.value}'."
+            detail=f"Cannot submit scores for an event with status '{event.status.value}'. The event must be opened."
         )
 
-    # Scoring is only allowed on event day or when the event is marked ongoing/completed
-    now_utc = datetime.now(timezone.utc)
-    event_start = event.start_time if (event.start_time and event.start_time.tzinfo) else (
-        event.start_time.replace(tzinfo=timezone.utc) if event.start_time else now_utc
-    )
-    is_event_day_or_past = (now_utc.date() >= event_start.date()) or (now_utc >= event_start)
-
-    if event.status not in [EventStatus.ONGOING, EventStatus.COMPLETED] and not is_event_day_or_past:
+    if event.status == EventStatus.COMPLETED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Judging and scorecard entry opens on the event day once the competition has commenced."
+            detail="This event is already completed and results have been finalized. Scoring is closed."
         )
 
     # Verify judge is assigned to this event OR is the event coordinator/admin
@@ -158,7 +151,7 @@ def submit_scores(
                 detail=f"Score {entry.score_value} exceeds maximum allowed score of {criteria.max_score} for {criteria.name}"
             )
 
-        # Upsert score
+        # Disallow re-scoring once score has been submitted
         existing_score = db.query(Score).filter(
             Score.judge_assignment_id == assignment.id,
             Score.criteria_id == criteria.id,
@@ -166,20 +159,20 @@ def submit_scores(
         ).first()
 
         if existing_score:
-            existing_score.score_value = entry.score_value
-            existing_score.remarks = entry.remarks
-            existing_score.submitted_at = datetime.now(timezone.utc)
-            saved_scores.append(existing_score)
-        else:
-            new_score = Score(
-                judge_assignment_id=assignment.id,
-                criteria_id=criteria.id,
-                registration_id=submission.registration_id,
-                score_value=entry.score_value,
-                remarks=entry.remarks
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Score has already been submitted and finalized for this competitor. You cannot submit or modify scores once submitted."
             )
-            db.add(new_score)
-            saved_scores.append(new_score)
+
+        new_score = Score(
+            judge_assignment_id=assignment.id,
+            criteria_id=criteria.id,
+            registration_id=submission.registration_id,
+            score_value=entry.score_value,
+            remarks=entry.remarks
+        )
+        db.add(new_score)
+        saved_scores.append(new_score)
 
     db.commit()
 
@@ -280,6 +273,9 @@ def publish_event_results(
     leaderboard = calculate_event_leaderboard(db, event_id, round_id)
     if not leaderboard:
         raise HTTPException(status_code=400, detail="Cannot publish results: No scores have been submitted yet.")
+
+    # Mark the event as COMPLETED when results are submitted/published
+    event.status = EventStatus.COMPLETED
 
     results_created = []
     now = datetime.now(timezone.utc)

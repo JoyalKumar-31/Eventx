@@ -47,6 +47,30 @@ export default function JudgeRankingsPage() {
     }
   };
 
+  const [publishing, setPublishing] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState(null);
+
+  const selectedEvent = assignedEvents.find(
+    (a) => String(a.id || a.event_id) === String(selectedEventId)
+  );
+
+  const handleFinalizeAndComplete = async () => {
+    if (!selectedEventId) return;
+    if (!window.confirm("Submit final results and complete this event? This will finalize standings, issue certificates, and mark the event COMPLETED.")) return;
+    try {
+      setPublishing(true);
+      await judgeApi.publishResults(Number(selectedEventId));
+      setPublishSuccess("Official results submitted & event marked COMPLETED!");
+      await fetchAssigned();
+      await loadLeaderboard(Number(selectedEventId));
+    } catch (err) {
+      console.error("Failed to publish results", err);
+      alert(err.response?.data?.detail || "Failed to submit results.");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -60,28 +84,69 @@ export default function JudgeRankingsPage() {
           </p>
         </div>
 
-        {/* Event selector */}
-        <div className="w-full sm:w-72">
-          <select
-            value={selectedEventId}
-            onChange={(e) => {
-              setSelectedEventId(e.target.value);
-              setSearchParams({ event_id: e.target.value });
-            }}
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
-          >
-            {assignedEvents.map((a) => {
-              const eventId = a.id || a.event_id;
-              const title = a.title || a.event?.title || `Event #${eventId}`;
-              return (
-                <option key={a.id} value={eventId}>
-                  {title}
-                </option>
-              );
-            })}
-          </select>
+        {/* Action Button & Event selector */}
+        <div className="flex flex-wrap items-center gap-3">
+          {leaderboard.length > 0 && (
+            <button
+              type="button"
+              onClick={handleFinalizeAndComplete}
+              disabled={publishing || selectedEvent?.status === "COMPLETED"}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg ${
+                selectedEvent?.status === "COMPLETED"
+                  ? "bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed"
+                  : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/30 cursor-pointer"
+              }`}
+            >
+              <Award className="w-4 h-4 text-amber-300" />
+              {selectedEvent?.status === "COMPLETED"
+                ? "Event Completed (Results Published)"
+                : publishing
+                ? "Submitting Results..."
+                : "Submit Results & Complete Event"}
+            </button>
+          )}
+
+          <div className="w-full sm:w-64">
+            <select
+              value={selectedEventId}
+              onChange={(e) => {
+                setSelectedEventId(e.target.value);
+                setSearchParams({ event_id: e.target.value });
+              }}
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+            >
+              {assignedEvents.map((a) => {
+                const eventId = a.id || a.event_id;
+                const title = a.title || a.event?.title || `Event #${eventId}`;
+                return (
+                  <option key={a.id} value={eventId}>
+                    {title}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
         </div>
       </div>
+
+      {publishSuccess && (
+        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center justify-between">
+          <span>{publishSuccess}</span>
+          <button onClick={() => setPublishSuccess(null)} className="text-slate-400 hover:text-white">✕</button>
+        </div>
+      )}
+
+      {selectedEvent?.status === "COMPLETED" && (
+        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center justify-between gap-3">
+          <div className="text-xs">
+            <strong className="block font-bold text-white text-sm">Event Completed & Standings Published</strong>
+            Official competition results have been published. Certificates are available for all participants.
+          </div>
+          <span className="px-3 py-1 rounded-full text-xs font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">
+            COMPLETED
+          </span>
+        </div>
+      )}
 
       {/* Table */}
       <div className="rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden shadow-xl">

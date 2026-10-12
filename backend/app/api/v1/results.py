@@ -63,7 +63,7 @@ def publish_results(
     event_id: int,
     round_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN))
+    current_user: User = Depends(require_role(UserRole.EVENT_COORDINATOR, UserRole.ADMIN, UserRole.JUDGE))
 ):
     """
     Finalizes and publishes results, computes ranks, generates certificates, and sends notifications.
@@ -74,6 +74,15 @@ def publish_results(
 
     if current_user.role == UserRole.EVENT_COORDINATOR and event.coordinator_id != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized to publish results for this event")
+
+    if current_user.role == UserRole.JUDGE:
+        from app.models.judging import JudgeAssignment
+        assignment = db.query(JudgeAssignment).filter(
+            JudgeAssignment.event_id == event_id,
+            JudgeAssignment.judge_id == current_user.id
+        ).first()
+        if not assignment:
+            raise HTTPException(status_code=403, detail="Unauthorized: You are not assigned as an authorized judge for this event")
 
     results = publish_event_results(
         db=db,

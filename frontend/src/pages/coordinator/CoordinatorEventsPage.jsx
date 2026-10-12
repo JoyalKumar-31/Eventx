@@ -55,6 +55,23 @@ const safeIsoDate = (dateVal, fallbackHoursFromNow = 24) => {
   return fallback.toISOString();
 };
 
+const formatDateTimeLocal = (dateVal) => {
+  if (!dateVal) return "";
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    const year = d.getFullYear();
+    const month = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const hours = pad(d.getHours());
+    const minutes = pad(d.getMinutes());
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  } catch {
+    return typeof dateVal === "string" ? dateVal.substring(0, 16) : "";
+  }
+};
+
 export default function CoordinatorEventsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -170,9 +187,9 @@ export default function CoordinatorEventsPage() {
       setMaxTeamSize(evt.max_team_size || 1);
       setRegistrationFee(evt.registration_fee || 0);
       setMaxParticipants(evt.max_participants || 100);
-      setStartDate(evt.start_time ? evt.start_time.substring(0, 16) : (evt.start_date ? evt.start_date.substring(0, 16) : ""));
-      setEndDate(evt.end_time ? evt.end_time.substring(0, 16) : (evt.end_date ? evt.end_date.substring(0, 16) : ""));
-      setRegDeadline(evt.registration_deadline ? evt.registration_deadline.substring(0, 16) : "");
+      setStartDate(formatDateTimeLocal(evt.start_time || evt.start_date));
+      setEndDate(formatDateTimeLocal(evt.end_time || evt.end_date));
+      setRegDeadline(formatDateTimeLocal(evt.registration_deadline));
       setVenueId(evt.venue_id || "");
       setPrimaryMediaUrl(evt.primary_media_url || null);
       setRules(evt.rules || []);
@@ -1019,8 +1036,48 @@ export default function CoordinatorEventsPage() {
                         <span className="font-semibold text-slate-200">{evt.category?.name || "General"}</span>
                         <div className="text-[11px] text-slate-500">{evt.event_format}</div>
                       </td>
-                      <td className="px-6 py-4 text-slate-400">
-                        {evt.start_date ? new Date(evt.start_date).toLocaleDateString() : "TBA"}
+                      <td className="px-6 py-4">
+                        {evt.start_time || evt.start_date ? (
+                          <div className="space-y-1">
+                            <div className="font-semibold text-white flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              <span>
+                                {new Date(evt.start_time || evt.start_date).toLocaleDateString([], {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric"
+                                })}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-400 flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                              <span>
+                                {new Date(evt.start_time || evt.start_date).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit"
+                                })}
+                                {(evt.end_time || evt.end_date) && (
+                                  <>
+                                    {" - "}
+                                    {new Date(evt.end_time || evt.end_date).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit"
+                                    })}
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                            {evt.venue?.name && (
+                              <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                                <MapPin className="w-2.5 h-2.5 text-rose-400 shrink-0" />
+                                <span className="truncate max-w-[140px]">{evt.venue.name}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-500 italic">TBA</span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <StatusBadge status={evt.status} />

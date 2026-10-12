@@ -177,6 +177,9 @@ export default function CoordinatorDashboard() {
                       <span>Category: <strong className="text-slate-300">{evt.category?.name || "General"}</strong></span>
                       <span>Format: <strong className="text-slate-300">{evt.event_format}</strong></span>
                       <span>Regs: <strong className="text-blue-400">{evt.registrations?.length || 0}</strong></span>
+                      {(evt.start_time || evt.start_date) && (
+                        <span>Schedule: <strong className="text-slate-300">{new Date(evt.start_time || evt.start_date).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</strong></span>
+                      )}
                     </div>
                   </div>
                 </div>
