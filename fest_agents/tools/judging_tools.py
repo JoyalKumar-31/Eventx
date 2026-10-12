@@ -761,36 +761,56 @@ def calculate_and_record_scores(
         }
 
 
-def get_judge_assigned_events(judge_id: int) -> List[Dict[str, Any]]:
+def get_judge_assigned_events(judge_id: Optional[int] = None, user_email: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Returns the list of fest events assigned to this judge from MySQL.
+    Returns the list of fest events assigned to this judge from the database.
     """
     try:
         from app.db.session import SessionLocal
         from app.models.judging import JudgeAssignment, Score
         from app.models.registration import Registration
+        from app.models.user import User
 
         db = SessionLocal()
         try:
-            assignments = db.query(JudgeAssignment).filter(JudgeAssignment.judge_id == judge_id).all()
+            target_id = judge_id
+            if not target_id and user_email:
+                u = db.query(User).filter(User.email == user_email.strip().lower()).first()
+                if u:
+                    target_id = u.id
+
+            if not target_id:
+                # Fallback to demo judge ID if completely unspecified
+                target_id = 7
+
+            assignments = db.query(JudgeAssignment).filter(JudgeAssignment.judge_id == target_id).all()
             output = []
             for a in assignments:
                 ev = a.event
                 if not ev:
                     continue
                 start_str = ev.start_time.strftime("%d %b, %I:%M %p") if ev.start_time else "TBA"
+                end_str = ev.end_time.strftime("%d %b, %I:%M %p") if ev.end_time else "TBA"
                 venue_str = ev.venue.name if ev.venue else "Campus Arena"
+                if ev.venue and ev.venue.room_number:
+                    venue_str += f" ({ev.venue.room_number})"
                 total_teams = db.query(Registration).filter(Registration.event_id == ev.id).count()
                 evaluated_teams = db.query(Score.registration_id).filter(
                     Score.judge_assignment_id == a.id
                 ).distinct().count()
 
+                ev_status = ev.status.value if hasattr(ev.status, "value") else str(ev.status)
+                a_status = a.status.value if hasattr(a.status, "value") else str(a.status)
+
                 output.append({
                     "event_id": ev.id,
+                    "assignment_id": a.id,
                     "title": ev.title,
                     "category": ev.category.name if ev.category else "General",
                     "venue": venue_str,
-                    "time": start_str,
+                    "time": f"{start_str} - {end_str}",
+                    "event_status": ev_status,
+                    "assignment_status": a_status,
                     "total_submissions": total_teams,
                     "evaluated_submissions": evaluated_teams,
                     "pending_submissions": max(0, total_teams - evaluated_teams)

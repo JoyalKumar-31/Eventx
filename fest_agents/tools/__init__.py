@@ -2,7 +2,13 @@
 tools package - Exports all fest management tools
 """
 
-from .event_tools import get_all_events, get_event_details, check_schedule_clash
+from .event_tools import (
+    get_all_events,
+    get_event_details,
+    check_schedule_clash,
+    get_coordinator_created_events,
+    get_event_registrations_summary
+)
 from .team_tools import (
     validate_team_size,
     check_registration_status,
@@ -38,6 +44,8 @@ __all__ = [
     "get_all_events",
     "get_event_details",
     "check_schedule_clash",
+    "get_coordinator_created_events",
+    "get_event_registrations_summary",
     "validate_team_size",
     "check_registration_status",
     "verify_qr_entry_pass",

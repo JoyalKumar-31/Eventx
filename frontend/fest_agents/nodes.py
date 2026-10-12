@@ -15,6 +15,8 @@ from .tools import (
     get_all_events,
     get_event_details,
     check_schedule_clash,
+    get_coordinator_created_events,
+    get_event_registrations_summary,
     validate_team_size,
     check_registration_status,
     verify_qr_entry_pass,
@@ -238,10 +240,16 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
             or (any(act in lower for act in ["change", "update", "set", "modify", "edit"]) and any(tgt in lower for tgt in ["year", "dept", "department", "phone", "mobile", "contact", "college", "university", "roll", "name", "profile"]))
         ):
             return "participant_agent"
-        elif role == "judge" and (
+        elif (
+            (role in ["event_coordinator", "coordinator"] and (
+                has_any(["my event", "my events", "created by me", "events i created", "what events did i create", "events i manage", "events managed by me", "events i coordinate", "what are my events", "managed events", "who registered", "how many registered", "how many are registered", "registration count", "registrations for", "capacity for"])
+            )) or has_any(["events created by", "events i created", "what events did i create", "created by me", "events managed by me", "events managed by him", "how many are registered", "how many registered", "registration count", "registrations for", "who registered for", "how many participants", "registered for"])
+        ):
+            return "event_agent"
+        elif (role == "judge" and (
             has_any(["participant", "participants", "roster", "registered", "submission", "submissions", "who", "entry", "entries", "evaluate", "competitor", "competitors"])
             or has_any(["assigned", "assign", "my event", "my events", "judge", "judging", "score", "scores", "evaluat", "rubric", "rank", "ranking", "leaderboard", "marks", "maximum", "highest", "top", "leader", "points", "grade"])
-        ):
+        )) or has_any(["events assigned", "assigned to me", "assigned to him", "events i judge", "what do i judge", "my panels"]):
             return "judging_agent"
         elif has_any(["score", "scores", "scored", "scoring", "judge", "judging", "evaluat", "evaluation", "evaluations", "rubric", "rubrics", "rank", "ranking", "rankings", "leaderboard", "standing", "standings", "marks", "marking", "grade", "grading", "highest score", "maximum score", "max score", "top score", "top scorer", "leading", "points", "winner", "winners", "scorecard", "criteria", "weightage", "roster", "assigned", "events i judge"]):
             return "judging_agent"
@@ -276,6 +284,35 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
                     f"Visit the live [Fest Schedule](/schedule) or [Campus Venues](/venues) for interactive floor maps."
                 )
 
+        # ACTION 1: Coordinator created events
+        is_coord_events_query = (
+            role in ["event_coordinator", "coordinator"] and
+            any(k in lower for k in ["my event", "my events", "created by me", "events i created", "what events did i create", "events i manage", "events managed by me", "events i coordinate", "what are my events", "managed events"])
+        ) or any(k in lower for k in [
+            "events created by him", "events created by me", "events i created", "what events did i create",
+            "what are the events created by him", "what are the events created by me", "events managed by him",
+            "events managed by me", "events coordinated by him", "events coordinated by me", "show what are the events created by him"
+        ])
+
+        if is_coord_events_query:
+            coord_res = get_coordinator_created_events(coordinator_id=user_id, user_email=user_email)
+            return coord_res["message"]
+
+        # ACTION 2: Event registration count & capacity report
+        is_reg_count_query = any(k in lower for k in [
+            "how many are registered", "how many registered", "registration count",
+            "registrations for", "who registered for", "how many participants in",
+            "how many participants for", "registered count", "number of registrations",
+            "total registrations for", "capacity for", "show how many are registred"
+        ]) or (
+            ("how many" in lower or "registrations" in lower or "registered" in lower) and
+            ("for" in lower or "in" in lower)
+        )
+
+        if is_reg_count_query:
+            reg_summary = get_event_registrations_summary(event_name_or_id=question, coordinator_id=user_id)
+            return reg_summary["message"]
+
         matched = get_event_details(question)
         if matched:
             rules_str = "\n".join(f"• {r}" for r in matched.get("rules", []))
@@ -285,14 +322,27 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
             min_s = matched.get("min_team_size", 1)
             max_s = matched.get("max_team_size", 1)
             team_str = f"{min_s}-{max_s} members" if is_team else "Individual (Solo)"
+            is_cap_full = matched.get("is_capacity_full") or matched.get("current_participants", 0) >= matched.get("max_participants", 50)
+            cur_p = matched.get("current_participants", 0)
+            max_p = matched.get("max_participants", 50)
+
+            if is_cap_full:
+                cap_line = f"👥 **Capacity**: 🔴 **Registrations Full** (`{cur_p}/{max_p}` participants registered — Maximum capacity reached)\n"
+                reg_advice = "⚠️ **Registration Notice**: This competition has reached full capacity. Registrations are complete and closed."
+            else:
+                rem_spots = max(0, max_p - cur_p)
+                cap_line = f"👥 **Capacity**: 🟢 **Open** (`{cur_p}/{max_p}` spots filled, **{rem_spots}** spots remaining)\n"
+                reg_advice = f"💡 *Ready to participate? Just say 'Register me for {matched['title']}'!*"
+
             return (
                 f"### 🎯 {matched['title']} ({matched['category']})\n\n"
                 f"📍 **Venue**: {matched['venue']}\n"
                 f"⏰ **Time**: {matched['start_time']} – {matched['end_time']}\n"
                 f"👥 **Team Size**: {team_str}\n"
+                f"{cap_line}"
                 f"💰 **Registration Fee**: {fee_str}\n\n"
                 f"📋 **Official Competition Rules**:\n{rules_str}\n\n"
-                f"💡 *Ready to participate? Just say 'Register me for {matched['title']}'!*"
+                f"{reg_advice}"
             )
 
         all_evs = get_all_events()
@@ -308,7 +358,11 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
             event_items = []
             for i, e in enumerate(all_evs[:15]):
                 new_tag = " ✨ **[New]**" if i < 3 else ""
-                status_str = f" `[{e.get('status', 'OPEN')}]`"
+                is_full = e.get("is_capacity_full") or e.get("current_participants", 0) >= e.get("max_participants", 50)
+                if is_full:
+                    status_str = f" `[🔴 REGISTRATIONS FULL]`"
+                else:
+                    status_str = f" `[{e.get('status', 'OPEN')}]`"
                 event_items.append(
                     f"• **{e['title']}** ({e['category']}){new_tag} — ⏰ {e['time']} | 📍 *{e['venue']}* | 💰 {e['fee']} | 👥 {e['team_size']}{status_str}"
                 )
@@ -359,6 +413,15 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
         # ACTION 1: Register student for event
         is_register_intent = any(k in lower for k in ["register me", "register for", "sign me up", "enroll me", "i want to register", "join event"])
         if is_register_intent:
+            if role not in ["student", ""]:
+                role_label = role.replace("_", " ").title()
+                return (
+                    f"⛔ **Registration Restricted to Students**\n\n"
+                    f"Only users with the **Student** role can register and compete in festival events. "
+                    f"You are currently logged in as a **{role_label}** ({user_name or user_email}).\n\n"
+                    f"To participate as a contestant, please sign in with a Student account at [/login](/login) or register at [/register](/register)."
+                )
+
             target_event = parse_registration_target(question)
             if not target_event:
                 # If user just said "register me" without event name
@@ -379,7 +442,7 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
             return reg_result["message"]
 
         # ACTION 2: Show my registrations / passes
-        if "my_registrations" in tool_outputs or any(k in lower for k in ["my registration", "my registrations", "my pass", "my passes", "what events am i", "my events", "my tickets"]):
+        if "my_registrations" in tool_outputs or any(k in lower for k in ["my registration", "my registrations", "my pass", "my passes", "what events am i", "my tickets"]) or (role == "student" and "my events" in lower):
             if not user_id and not user_email:
                 return (
                     "Please log into your student account to inspect your registrations and digital passes. "
@@ -565,22 +628,29 @@ def _generate_fallback(agent_type: str, state: AgentState) -> str:
             return res["message"]
 
         # ACTION 5: ASSIGNED EVENTS (Judge role)
-        if any(k in lower for k in ["assigned", "my event", "my events", "events i judge", "what do i judge", "my panels"]):
-            assigned = get_judge_assigned_events(user_id or 7)
+        if any(k in lower for k in ["assigned", "my event", "my events", "events i judge", "what do i judge", "my panels", "what are the events assigned", "events assigned to him", "events assigned to me", "show events assigned", "assigned competitions"]):
+            assigned = get_judge_assigned_events(judge_id=user_id, user_email=user_email)
             if assigned:
                 lines = []
                 for a in assigned:
                     lines.append(
-                        f"• **{a['title']}** ({a['category']})\n"
-                        f"  - Venue: {a['venue']} | Time: {a['time']}\n"
-                        f"  - Submissions: {a['total_submissions']} total ({a['evaluated_submissions']} evaluated, {a['pending_submissions']} pending)\n"
-                        f"  - [Open Scoring Console](/judge/scoring?event={a['event_id']})"
+                        f"• **{a['title']}** ({a['category']}) — `[{a.get('event_status', 'PUBLISHED')}]`\n"
+                        f"  - 📍 **Venue**: {a['venue']} | ⏰ **Time**: {a['time']}\n"
+                        f"  - 📊 **Submissions**: {a['total_submissions']} total ({a['evaluated_submissions']} evaluated, {a['pending_submissions']} pending)\n"
+                        f"  - 🎯 **Status**: `[{a.get('assignment_status', 'ASSIGNED')}]`\n"
+                        f"  - 🔗 [Open Scoring Console](/judge/scoring?event={a['event_id']})"
                     )
                 return (
                     f"### ⚖️ Your Assigned Judging Competitions\n\n"
                     f"{greeting}! Here are your designated evaluation panels from the database:\n\n"
                     + "\n\n".join(lines)
                     + f"\n\nTo score any competitor, say *'Score 85 for [Participant] in {assigned[0]['title']}'* or open your [Judge Scoring Console](/judge/scoring)."
+                )
+            else:
+                return (
+                    f"### ⚖️ Assigned Judging Panels\n\n"
+                    f"{greeting}! You are logged in as an official Fest Judge, but no events have been assigned to your judging panel yet.\n\n"
+                    f"Once festival coordinators assign you to a competition, your designated panel will appear here and in your [Judge Scoring Console](/judge/scoring)."
                 )
 
         # ACTION 6: ADD / CREATE SCORING CRITERIA
@@ -779,33 +849,84 @@ def event_management_agent(state: AgentState) -> Dict[str, Any]:
     question = state["question"]
     attempt = state.get("attempts", 0)
     history = state.get("history", [])
+    user_role = str(state.get("user_role", "student")).lower().strip()
+    context = state.get("event_context", {})
+    user_id = context.get("user_id")
+    user_email = context.get("user_email")
+    user_name = context.get("user_name")
+    lower = question.lower()
+
+    # Pre-execute coordinator-specific tools
+    is_coord_events_query = (
+        user_role in ["event_coordinator", "coordinator"] and
+        any(k in lower for k in ["my event", "my events", "created by me", "events i created", "what events did i create", "events i manage", "events managed by me", "events i coordinate", "what are my events", "managed events"])
+    ) or any(k in lower for k in [
+        "events created by him", "events created by me", "events i created", "what events did i create",
+        "what are the events created by him", "what are the events created by me", "events managed by him",
+        "events managed by me", "events coordinated by him", "events coordinated by me", "show what are the events created by him"
+    ])
+
+    is_reg_count_query = any(k in lower for k in [
+        "how many are registered", "how many registered", "registration count",
+        "registrations for", "who registered for", "how many participants in",
+        "how many participants for", "registered count", "number of registrations",
+        "total registrations for", "capacity for", "show how many are registred"
+    ]) or (
+        ("how many" in lower or "registrations" in lower or "registered" in lower) and
+        ("for" in lower or "in" in lower)
+    )
+
+    coordinator_events_payload = None
+    registrations_summary_payload = None
+    tool_outputs = {}
+
+    if is_coord_events_query:
+        coordinator_events_payload = get_coordinator_created_events(coordinator_id=user_id, user_email=user_email)
+        tool_outputs["coordinator_events"] = coordinator_events_payload
+
+    if is_reg_count_query:
+        registrations_summary_payload = get_event_registrations_summary(event_name_or_id=question, coordinator_id=user_id)
+        tool_outputs["registrations_summary"] = registrations_summary_payload
 
     all_events = get_all_events()
     matched_event = get_event_details(question)
+    tool_outputs["matched_event"] = matched_event
 
     import json
-    events_payload = matched_event if matched_event else all_events[:15]
+    if coordinator_events_payload:
+        events_payload = coordinator_events_payload
+    elif registrations_summary_payload:
+        events_payload = registrations_summary_payload
+    elif matched_event:
+        events_payload = matched_event
+    else:
+        events_payload = all_events[:15]
+
     events_json = json.dumps(events_payload, indent=2, default=str)
 
     prompt = f"""
 You are the Event Management Agent of EventX college fest platform.
-The events in EVENT DATA are retrieved live from the database and ordered with the NEWEST / MOST RECENTLY CREATED EVENTS FIRST.
+User: {user_name or 'User'} (Role: {user_role})
 
 USER INQUIRY:
 {question}
 
-EVENT DATA (from Live Database, ordered newest first):
+EVENT DATA (from Live Database):
 {events_json}
 
 GUIDELINES:
-1. If the user asks to show, list, or check events (including newly added, recent, or updated events):
-   - Present the festival competitions and workshops in reverse-chronological order (newest first).
-   - Prominently highlight the newest events (e.g. ✨ [New]).
-   - For each event, include: Title, Category, Date/Time Schedule, Venue, Registration Fee, and Team Size / Solo requirements.
-   - Mention that students can register instantly by saying "Register me for [Event Name]" or by visiting the interactive [Event Catalog](/events).
-2. If the user asks about a specific competition:
-   - Provide complete details: Rules, Schedule, Venue, Registration Fee, Team Requirements, and how to register.
-3. Be friendly, energetic, accurate to the live database events, and format the response with clean Markdown.
+1. If the user is an Event Coordinator asking for events created/managed by them:
+   - Detail their created competitions, venue, schedule, entry fees, and registration capacity counts.
+   - If capacity is full, highlight 🔴 CAPACITY FULL ({events_payload.get('current_participants', '')}/{events_payload.get('max_participants', '')}).
+2. If the user is asking how many are registered for an event:
+   - Provide the complete registration roster breakdown (total registered, confirmed active, attended, pending payment, available spots).
+   - If registrations reached max capacity, inform them that registrations are full.
+3. If asking to browse or show events:
+   - Present festival competitions in reverse-chronological order (newest first).
+   - If an event has reached capacity (is_capacity_full is true), label it as 🔴 [Registrations Full].
+   - Provide registration instructions ("Register me for [Event Name]") for open competitions.
+4. If asking about a specific competition:
+   - Provide complete details: Rules, Schedule, Venue, Registration Fee, Capacity Status, Team Requirements.
 """
     answer = invoke_llm(prompt, "event_agent", state)
 
@@ -814,7 +935,7 @@ GUIDELINES:
 
     return {
         "agent_response": answer,
-        "tool_outputs": {"matched_event": matched_event},
+        "tool_outputs": tool_outputs,
         "history": new_history,
         "attempts": attempt + 1
     }
@@ -825,6 +946,7 @@ def participant_team_agent(state: AgentState) -> Dict[str, Any]:
     attempt = state.get("attempts", 0)
     history = state.get("history", [])
     context = state.get("event_context", {})
+    user_role = str(state.get("user_role", "student")).lower().strip()
 
     tools_context = {}
     lower = question.lower()
@@ -854,16 +976,30 @@ def participant_team_agent(state: AgentState) -> Dict[str, Any]:
 
     # 3. Event Registration
     if any(k in lower for k in ["register me", "register for", "sign me up", "enroll me", "i want to register", "join event"]):
-        target = parse_registration_target(question)
-        if target:
-            tools_context["action_result"] = register_student_for_event(
-                event_name_or_id=target,
-                user_id=context.get("user_id"),
-                user_email=context.get("user_email")
-            )
+        if user_role not in ["student", ""]:
+            role_label = user_role.replace("_", " ").title()
+            user_name = context.get("user_name") or context.get("user_email") or "User"
+            tools_context["action_result"] = {
+                "success": False,
+                "error": "STUDENT_ONLY_REGISTRATION",
+                "message": (
+                    f"⛔ **Registration Restricted to Students**\n\n"
+                    f"Only users with the **Student** role can register and compete in festival events. "
+                    f"You are currently logged in as a **{role_label}** ({user_name}).\n\n"
+                    f"To participate as a contestant, please sign in with a Student account or create one at [/register](/register)."
+                )
+            }
+        else:
+            target = parse_registration_target(question)
+            if target:
+                tools_context["action_result"] = register_student_for_event(
+                    event_name_or_id=target,
+                    user_id=context.get("user_id"),
+                    user_email=context.get("user_email")
+                )
 
     # 4. Registrations & Passes
-    if any(k in lower for k in ["my registration", "my registrations", "my pass", "my passes", "what events am i", "my events"]):
+    if any(k in lower for k in ["my registration", "my registrations", "my pass", "my passes", "what events am i"]) or (user_role == "student" and "my events" in lower):
         tools_context["my_registrations"] = get_user_registrations(
             user_id=context.get("user_id"),
             user_email=context.get("user_email")
@@ -944,8 +1080,8 @@ def judging_evaluation_agent(state: AgentState) -> Dict[str, Any]:
         )
 
     # 5. Assigned events
-    elif any(k in lower for k in ["assigned", "my event", "my events", "events i judge", "what do i judge", "my panels"]):
-        tools_context["assigned_events"] = get_judge_assigned_events(user_id or 7)
+    elif any(k in lower for k in ["assigned", "my event", "my events", "events i judge", "what do i judge", "my panels", "what are the events assigned", "events assigned to him", "events assigned to me", "show events assigned", "assigned competitions"]):
+        tools_context["assigned_events"] = get_judge_assigned_events(judge_id=user_id, user_email=context.get("user_email"))
 
     # 6. Rubrics / Criteria
     elif any(k in lower for k in ["criteria", "rubric", "weightage", "marking scheme", "how is"]):

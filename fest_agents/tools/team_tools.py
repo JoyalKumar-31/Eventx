@@ -192,6 +192,21 @@ def register_student_for_event(
                     "message": "You must be logged in as a Student to register for events. Please log in or sign up at [/register](/register)."
                 }
 
+            from app.models.enums import UserRole
+            if user.role != UserRole.STUDENT:
+                role_name = user.role.value if hasattr(user.role, "value") else str(user.role)
+                role_label = role_name.replace("_", " ").title()
+                return {
+                    "success": False,
+                    "error": "STUDENT_ONLY_REGISTRATION",
+                    "message": (
+                        f"⛔ **Registration Restricted to Students**\n\n"
+                        f"Only users with the **Student** role can register and compete in festival events. "
+                        f"You are currently logged in as a **{role_label}** ({user.full_name}).\n\n"
+                        f"To participate as a contestant, please sign in with your student account or create one at [/register](/register)."
+                    )
+                }
+
             # 2. Resolve Event
             clean_input = str(event_name_or_id).strip().lower()
             db_events = (
@@ -255,6 +270,20 @@ def register_student_for_event(
                     "success": False,
                     "error": "REGISTRATION_DEADLINE_PASSED",
                     "message": f"⚠️ Registration deadline for **{matched_event.title}** has passed. Registration deadline complete."
+                }
+
+            # 2.6 Check event capacity
+            if matched_event.current_participants >= matched_event.max_participants:
+                return {
+                    "success": False,
+                    "error": "REGISTRATION_FULL",
+                    "message": (
+                        f"⚠️ **Registrations Full**\n\n"
+                        f"**{matched_event.title}** has reached its maximum capacity of {matched_event.max_participants} participants "
+                        f"({matched_event.current_participants}/{matched_event.max_participants} registered).\n\n"
+                        f"New registrations for this competition are now full and closed. "
+                        f"Browse other open events in the [Event Catalog](/events)!"
+                    )
                 }
 
             # 3. Check existing registration
